@@ -1,0 +1,12 @@
+{
+  "name": "ssr-proxy-js-test",
+  "version": "1.0.0",
+  "scripts": {
+    "setup": "npm install",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^0.24.0",
+    "ssr-proxy-js": "file:../"
+  }
+}
