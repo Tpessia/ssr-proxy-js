@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "scripts": {
     "setup": "npm install",
-    "start": "node index.js"
+    "start": "nodemon index.js",
+    "http-test": "node http-test.js"
   },
   "dependencies": {
     "axios": "^0.24.0",
     "ssr-proxy-js": "file:../"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
   }
 }

@@ -27,6 +27,7 @@ export interface ProxyParams {
     isBot: boolean;
     sourceUrl: string;
     targetUrl: string;
+    lastError?: any;
 }
 
 export interface ProxyTypeParams extends ProxyParams {
@@ -53,12 +54,11 @@ export interface SsrProxyConfig {
     proxyOrder?: ProxyType[];
     failStatus?: (params: ProxyTypeParams) => number;
     cache?: {
-        enabled?: boolean;
         shouldUse?: (params: ProxyTypeParams) => boolean;
         maxEntries?: number;
         maxByteSize?: number;
         expirationMs?: number;
-        autoRenovation?: {
+        autoRefresh?: {
             enabled?: boolean;
             shouldUse?: () => boolean;
             proxyOrder?: ProxyType[];
@@ -82,7 +82,9 @@ export interface SsrProxyConfig {
     };
     static?: {
         shouldUse?: (params: ProxyParams) => boolean;
-        filesPath?: string;
+        dirPath?: string;
+        useIndexFile?: (path: string) => boolean;
+        indexFile?: string;
     };
     log?: {
         level?: number;

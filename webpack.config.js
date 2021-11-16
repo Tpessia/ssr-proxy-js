@@ -1,6 +1,5 @@
 const path = require('path');
 const pkg = require('./package.json');
-const NodemonPlugin = require('nodemon-webpack-plugin');
 const nodeExternals = require('webpack-node-externals');
 
 module.exports = {
@@ -24,14 +23,8 @@ module.exports = {
         filename: 'ssr-proxy.js',
         path: path.resolve(__dirname, 'dist'),
         libraryTarget: 'umd',
-        library: pkg.name,
-        globalObject: 'this'
+        library: pkg.name
     },
-    plugins: [
-        new NodemonPlugin({ // runs output.filename on webpack --watch
-            nodeArgs: ['--inspect=9229']
-        })
-    ],
     externals: [
         nodeExternals() // in order to ignore all modules in node_modules folder
     ]

@@ -31,7 +31,7 @@ import { ProxyCache } from './proxy-cache';
 import { CacheItem, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
 import { promiseParallel, streamToString } from './utils';
 
-export default class SsrProxy {
+class SsrProxy {
     private config: SsrProxyConfig;
     private proxyCache?: ProxyCache; // In-memory cache of rendered pages
     private browserWSEndpoint?: string; // Reusable browser connection
@@ -44,12 +44,11 @@ export default class SsrProxy {
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
             failStatus: params => 404,
             cache: {
-                enabled: true,
                 shouldUse: params => params.proxyType === ProxyType.SsrProxy,
                 maxEntries: 50,
                 maxByteSize: 50 * 1024 * 1024, // 50MB
                 expirationMs: 10 * 60 * 1000, // 10 minutes
-                autoRenovation: {
+                autoRefresh: {
                     enabled: false,
                     shouldUse: () => true,
                     proxyOrder: [ProxyType.SsrProxy],
@@ -72,7 +71,9 @@ export default class SsrProxy {
             },
             static: {
                 shouldUse: params => true,
-                filesPath: './dist',
+                dirPath: './dist',
+                useIndexFile: path => path.endsWith('/'),
+                indexFile: 'index.html',
             },
             log: {
                 level: 1,
@@ -81,14 +82,18 @@ export default class SsrProxy {
                 },
                 file: {
                     enabled: true,
-                    dirPath: path.join(os.tmpdir(), 'ssr-proxy/logs'),
+                    dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
                 },
             },
         };
 
         this.config = deepmerge<SsrProxyConfig>(this.config, config, {
-            arrayMerge: (destinationArray, sourceArray, options) => sourceArray,
+            arrayMerge: (destArray, srcArray, opts) => srcArray,
         });
+
+        // TODO: create config validador (check undefined keys)
+
+        this.config.targetRoute! = `${this.config.targetRoute}/`.replace(/\/\//g, '/');;
 
         const cLog = this.config.log;
         Logger.setLevel(cLog!.level!);
@@ -100,43 +105,43 @@ export default class SsrProxy {
     }
 
     start() {
-        this.cacheRenovation();
+        this.startCacheJob();
         const app = this.listen();
     }
 
-    private cacheRenovation() {
+    private startCacheJob() {
         const $this = this;
         const cCache = this.config.cache!;
-        const cAutoCache = cCache.autoRenovation!;
+        const cAutoCache = cCache.autoRefresh!;
 
-        const enabled = cCache.enabled! && cAutoCache.enabled! && cAutoCache.routes! && cAutoCache.routes!.length!;
+        const enabled = cAutoCache.enabled! && cAutoCache.routes! && cAutoCache.routes!.length!;
         if (!enabled) return;
 
         setTimeout(() => {
-            runRenovation();
-            const interval = setInterval(runRenovation, cCache.autoRenovation!.intervalMs!);
-        }, cCache.autoRenovation!.initTimeoutMs!);
+            runRefresh();
+            const interval = setInterval(runRefresh, cCache.autoRefresh!.intervalMs!);
+        }, cCache.autoRefresh!.initTimeoutMs!);
 
-        async function runRenovation() {
+        async function runRefresh() {
             const logger = new Logger(true);
 
             try {
                 if (!cAutoCache.shouldUse || !cAutoCache.shouldUse!() || !cAutoCache.routes?.length) return;
     
                 const routesStr = '> ' + cAutoCache.routes!.map(e => e.url).join('\n> ');
-                logger.info(`Renovating Cache:\n${routesStr}`);
+                logger.info(`Refreshing Cache:\n${routesStr}`);
     
                 await promiseParallel(cAutoCache.routes!.map((route) => () => new Promise(async (res, rej) => {
                     try {
                         const params: ProxyParams = { isBot: cAutoCache.isBot!, sourceUrl: route.url, targetUrl: route.url };
                         const { result, proxyType } = await $this.runProxy(params, logger, undefined, route.method, route.headers);
                     } catch (err) {
-                        logger.error('CacheRenovation', err, false);
+                        logger.error('CacheRefresh', err, false);
                         rej(err);
                     }
                 })), cAutoCache.parallelism!);
             } catch (err) {
-                logger.error('CacheRenovation', err, false);
+                logger.error('CacheRefresh', err, false);
             }
         }
     }
@@ -154,7 +159,7 @@ export default class SsrProxy {
                 const userAgent = req.get('user-agent');
                 const isBot = isbot(userAgent); // tip: Lighthouse is a bot
                 const sourceUrl = req.originalUrl;
-                const targetUrl = `${req.protocol}://${this.config.targetRoute}${req.originalUrl}`;
+                const targetUrl = new URL(req.originalUrl, `${req.protocol}://${this.config.targetRoute}`).toString();
                 const params: ProxyParams = { isBot, sourceUrl, targetUrl };
 
                 const { result, proxyType } = await this.runProxy(params, logger, userAgent, req.method, req.headers);
@@ -219,7 +224,7 @@ export default class SsrProxy {
         let proxyType: ProxyType = this.config.proxyOrder![0];
 
         for (let i in this.config.proxyOrder!) {
-            proxyType = this.config.proxyOrder[i];
+            proxyType = this.config.proxyOrder![i];
 
             try {
                 if (proxyType === ProxyType.SsrProxy) {
@@ -233,6 +238,7 @@ export default class SsrProxy {
                 }
             } catch (err) {
                 result = { error: err };
+                params.lastError = err;
             }
 
             if (result.error == null) break;
@@ -268,14 +274,16 @@ export default class SsrProxy {
 
             // Try use SsrProxy
 
-            let { text: html, ttRenderMs, error } = await this.tryRender(params.targetUrl, logger);
+            let { text, ttRenderMs, error } = await this.tryRender(params.targetUrl, logger);
+
+            // TODO: response headers
 
             const isSuccess = error == null;
 
             logger.info(`SSR Result | Success: ${isSuccess} | Render Time: ${ttRenderMs}ms | Message: ${error || 'Success'}`);
 
             if (!isSuccess) return { error };
-            if (html == null) html = '';
+            if (text == null) text = '';
 
             const headers = {
                 'Server-Timing': `Prerender;dur=${ttRenderMs};desc="Headless render time (ms)"`,
@@ -283,9 +291,9 @@ export default class SsrProxy {
             
             const contentType = this.getContentType(params.targetUrl);
 
-            this.trySaveCache(html, contentType, cacheKey, typeParams, logger);
+            this.trySaveCache(text, contentType, cacheKey, typeParams, logger);
 
-            return { text: html, contentType, headers };
+            return { text, contentType, headers };
         } catch (err: any) {
             logger.error('SsrError', err, false);
             return { error: err };
@@ -324,6 +332,8 @@ export default class SsrProxy {
                 headers: headers as any,
             }).then(r => r.data);
 
+            // TODO: response headers
+
             const contentType = this.getContentType(params.targetUrl);
 
             this.trySaveCacheStream(dataStream, contentType, cacheKey, typeParams, logger);
@@ -361,11 +371,10 @@ export default class SsrProxy {
 
             // Try use StaticProxy
 
-            // const filePath = path.resolve(__dirname, fallback.filePath);
-            const url = new URL(params.targetUrl);
-            let urlPath = url.pathname + url.search + url.hash; // TODO: remove url config prefix
-            if (/\.html$/.test(urlPath) || !/\./.test(urlPath)) urlPath = 'index.html';
-            const filePath = path.join(__dirname, cStatic.filesPath!, urlPath);
+            if (cStatic.useIndexFile!(params.sourceUrl))
+                params.sourceUrl = `${params.sourceUrl}/${cStatic.indexFile!}`.replace(/\/\//g, '/');
+
+            const filePath = path.join(path.dirname(process.argv[1]), cStatic.dirPath!, params.sourceUrl);
 
             logger.debug(`Static Path: ${filePath}`);
 
@@ -385,7 +394,7 @@ export default class SsrProxy {
     private tryGetCache(cacheKey: string, params: ProxyTypeParams, logger: Logger): CacheItem | null {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.enabled! && cCache.shouldUse!(params) && this.proxyCache?.has(cacheKey);
+        const shouldUse = cCache.shouldUse!(params) && this.proxyCache?.has(cacheKey);
 
         if (shouldUse) {
             logger.debug(`Cache Hit: ${cacheKey}`);
@@ -402,7 +411,7 @@ export default class SsrProxy {
     private trySaveCache(text: string, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.enabled! && cCache.shouldUse!(params) && this.proxyCache;
+        const shouldUse = cCache.shouldUse!(params) && this.proxyCache!;
 
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
@@ -414,7 +423,7 @@ export default class SsrProxy {
     private trySaveCacheStream(stream: Stream, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.enabled! && cCache.shouldUse!(params) && this.proxyCache;
+        const shouldUse = cCache.shouldUse!(params) && this.proxyCache!;
 
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
@@ -425,9 +434,7 @@ export default class SsrProxy {
     }
 
     private tryClearCache(logger: Logger) {
-        const cCache = this.config.cache!;
-
-        if (cCache.enabled! && this.proxyCache!) {
+        if (this.proxyCache!) {
             const deleted = this.proxyCache.tryClear();
             if (deleted.length) logger.debug(`Cache Cleared: ${JSON.stringify(deleted)}`);
         }
@@ -465,6 +472,8 @@ export default class SsrProxy {
                 req.continue();
             });
 
+            // TODO: inject headers
+
             await page.goto(url.toString(), { waitUntil: 'networkidle0' });
 
             logger.debug('SSR: Connected');
@@ -492,3 +501,5 @@ export default class SsrProxy {
         return type;
     }
 }
+
+export = SsrProxy;

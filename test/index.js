@@ -2,16 +2,14 @@ const os = require('os');
 const path = require('path');
 const SsrProxy = require('ssr-proxy-js');
 
-console.log('SsrProxy',SsrProxy)
-
-const BASE_PROXY_ROUTE = 'http://localhost:3000';
-const STATIC_FILES_PATH = '../dist';
+const BASE_PROXY_ROUTE = 'localhost:3000';
+const STATIC_FILES_PATH = './public-dir';
 
 const loggingPath = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`Logging at: ${loggingPath}`);
 
-const ssrProxy = new SsrProxy.default({ // TODO: fix default
+const ssrProxy = new SsrProxy({
     port: 8080,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
@@ -23,8 +21,7 @@ const ssrProxy = new SsrProxy.default({ // TODO: fix default
         maxEntries: 50,
         maxByteSize: 50 * 1024 * 1024, // 50MB
         expirationMs: 10 * 60 * 1000, // 10 minutes
-        autoRenovation: {
-            enabled: true,
+        autoRefresh: {
             shouldUse: () => true,
             proxyOrder: ['SsrProxy'],
             initTimeoutMs: 5 * 1000, // 5 seconds
@@ -49,7 +46,9 @@ const ssrProxy = new SsrProxy.default({ // TODO: fix default
     },
     static: {
         shouldUse: params => true,
-        filesPath: STATIC_FILES_PATH,
+        dirPath: STATIC_FILES_PATH,
+        useIndexFile: path => path.endsWith('/'),
+        indexFile: 'index.html',
     },
     log: {
         level: 3,
@@ -58,7 +57,7 @@ const ssrProxy = new SsrProxy.default({ // TODO: fix default
         },
         file: {
             enabled: true,
-            dirPath: path.join(os.tmpdir(), 'ssr-proxy/logs'),
+            dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
         },
     },
 });
