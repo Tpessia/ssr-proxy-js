@@ -1,6 +1,6 @@
 {
   "name": "ssr-proxy-js",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Server-Side Rendering Proxy",
   "keywords": [
     "ssr",
@@ -15,9 +15,16 @@
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "src/**/*",
+    "dist/**/*"
+  ],
   "scripts": {
+    "setup": "npm i -g np && npm i",
     "build:dev": "rimraf dist && cross-env NODE_ENV=development webpack --config webpack.config.js --mode development --watch",
-    "build": "rimraf dist && cross-env NODE_ENV=production webpack --config webpack.config.js --mode production"
+    "build": "rimraf dist && cross-env NODE_ENV=production webpack --config webpack.config.js --mode production",
+    "publish:dry": "npm publish --dry-run",
+    "publish:np": "np --no-yarn --no-tests --branch=main --no-2fa"
   },
   "dependencies": {
     "axios": "^0.24.0",
