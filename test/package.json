@@ -10,7 +10,7 @@
   "dependencies": {
     "axios": "^0.24.0",
     "ssr-proxy-js-local": "file:../",
-    "ssr-proxy-js": "^1.0.0"
+    "ssr-proxy-js": "^1.0.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.15",

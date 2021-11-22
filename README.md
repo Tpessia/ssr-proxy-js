@@ -1,3 +1,6 @@
+[![NuGet Status](https://img.shields.io/npm/v/ssr-proxy-js)](https://www.npmjs.com/package/ssr-proxy-js)
+[![NuGet Status](https://img.shields.io/npm/dm/ssr-proxy-js)](https://www.npmjs.com/package/ssr-proxy-js)
+
 # ssr-proxy.js
 
 A Server-Side Rendering Proxy focused on customization and flexibility!
