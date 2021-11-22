@@ -1,13 +1,13 @@
 const os = require('os');
 const path = require('path');
-const SsrProxy = require('ssr-proxy-js');
+const { SsrProxy } = require('ssr-proxy-js');
 
 const BASE_PROXY_ROUTE = 'localhost:3000';
-const STATIC_FILES_PATH = './public-dir';
+const STATIC_FILES_PATH = './public';
 
 const loggingPath = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
-console.log(`Logging at: ${loggingPath}`);
+console.log(`\nLogging at: ${loggingPath}`);
 
 const ssrProxy = new SsrProxy({
     port: 8080,
@@ -15,6 +15,7 @@ const ssrProxy = new SsrProxy({
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
     failStatus: params => 404,
+    // isBot: (method, url, headers) => true,
     cache: {
         enabled: true,
         shouldUse: params => params.proxyType === 'SsrProxy',
@@ -22,10 +23,11 @@ const ssrProxy = new SsrProxy({
         maxByteSize: 50 * 1024 * 1024, // 50MB
         expirationMs: 10 * 60 * 1000, // 10 minutes
         autoRefresh: {
+            enabled: false,
             shouldUse: () => true,
             proxyOrder: ['SsrProxy'],
             initTimeoutMs: 5 * 1000, // 5 seconds
-            intervalMs: 5 * 60 * 1000, // 4 minutes
+            intervalMs: 5 * 60 * 1000, // 5 minutes
             parallelism: 5,
             routes: [
                 { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/` },
@@ -40,6 +42,10 @@ const ssrProxy = new SsrProxy({
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         },
+        queryParams: [{
+            key: 'headless',
+            value: 'true',
+        }],
     },
     httpProxy: {
         shouldUse: params => true,

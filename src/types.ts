@@ -12,6 +12,7 @@ export enum ProxyType {
 export interface SsrRenderResult {
     text?: string;
     error?: string;
+    headers?: any;
     ttRenderMs: number;
 }
 
@@ -53,6 +54,7 @@ export interface SsrProxyConfig {
     targetRoute?: string;
     proxyOrder?: ProxyType[];
     failStatus?: (params: ProxyTypeParams) => number;
+    isBot?: (method: string, url: string, headers: any) => boolean,
     cache?: {
         shouldUse?: (params: ProxyTypeParams) => boolean;
         maxEntries?: number;
@@ -76,6 +78,10 @@ export interface SsrProxyConfig {
     ssr?: {
         shouldUse?: (params: ProxyParams) => boolean;
         browserConfig?: SsrBrowerConfig;
+        queryParams?: {
+            key: string,
+            value: string,
+        }[];
     };
     httpProxy?: {
         shouldUse?: (params: ProxyParams) => boolean;

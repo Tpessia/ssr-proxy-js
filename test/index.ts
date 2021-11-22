@@ -1,9 +1,12 @@
-import SsrProxy from 'ssr-proxy-js';
+import { SsrProxy, SsrProxyConfig } from 'ssr-proxy-js';
 
-const ssrProxy = new SsrProxy({
-    port: 8080,
+const config: SsrProxyConfig = {
+    port: 8081,
     hostname: '0.0.0.0',
     targetRoute: 'localhost:3000',
-});
+    log: { level: 2 },
+}
+
+const ssrProxy = new SsrProxy(config);
 
 ssrProxy.start();

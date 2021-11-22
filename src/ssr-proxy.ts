@@ -1,3 +1,8 @@
+// Node.js modules
+// https://zellwk.com/blog/publish-to-npm/
+// https://www.sensedeep.com/blog/posts/2021/how-to-create-single-source-npm-module.html
+// https://electerious.medium.com/from-commonjs-to-es-modules-how-to-modernize-your-node-js-app-ad8cdd4fb662
+
 // Puppeteer SSR
 // https://developers.google.com/web/tools/puppeteer/articles/ssr
 
@@ -31,7 +36,7 @@ import { ProxyCache } from './proxy-cache';
 import { CacheItem, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
 import { promiseParallel, streamToString } from './utils';
 
-class SsrProxy {
+export class SsrProxy {
     private config: SsrProxyConfig;
     private proxyCache?: ProxyCache; // In-memory cache of rendered pages
     private browserWSEndpoint?: string; // Reusable browser connection
@@ -43,6 +48,7 @@ class SsrProxy {
             targetRoute: 'localhost:80',
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
             failStatus: params => 404,
+            isBot: (method: string, url: string, headers: any) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             cache: {
                 shouldUse: params => params.proxyType === ProxyType.SsrProxy,
                 maxEntries: 50,
@@ -65,6 +71,10 @@ class SsrProxy {
                     headless: true,
                     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
                 },
+                queryParams: [{
+                    key: 'headless',
+                    value: 'true',
+                }],
             },
             httpProxy: {
                 shouldUse: params => true,
@@ -76,7 +86,7 @@ class SsrProxy {
                 indexFile: 'index.html',
             },
             log: {
-                level: 1,
+                level: 2,
                 console: {
                     enabled: true,
                 },
@@ -90,8 +100,6 @@ class SsrProxy {
         this.config = deepmerge<SsrProxyConfig>(this.config, config, {
             arrayMerge: (destArray, srcArray, opts) => srcArray,
         });
-
-        // TODO: create config validador (check undefined keys)
 
         this.config.targetRoute! = `${this.config.targetRoute}/`.replace(/\/\//g, '/');;
 
@@ -134,7 +142,7 @@ class SsrProxy {
                 await promiseParallel(cAutoCache.routes!.map((route) => () => new Promise(async (res, rej) => {
                     try {
                         const params: ProxyParams = { isBot: cAutoCache.isBot!, sourceUrl: route.url, targetUrl: route.url };
-                        const { result, proxyType } = await $this.runProxy(params, logger, undefined, route.method, route.headers);
+                        const { result, proxyType } = await $this.runProxy(params, logger, route.method, route.headers);
                     } catch (err) {
                         logger.error('CacheRefresh', err, false);
                         rej(err);
@@ -156,13 +164,14 @@ class SsrProxy {
             const logger = new Logger();
 
             try {
-                const userAgent = req.get('user-agent');
-                const isBot = isbot(userAgent); // tip: Lighthouse is a bot
                 const sourceUrl = req.originalUrl;
                 const targetUrl = new URL(req.originalUrl, `${req.protocol}://${this.config.targetRoute}`).toString();
+
+                const isBot = this.config.isBot!(req.method, sourceUrl, req.headers); // tip: Lighthouse is a bot
+
                 const params: ProxyParams = { isBot, sourceUrl, targetUrl };
 
-                const { result, proxyType } = await this.runProxy(params, logger, userAgent, req.method, req.headers);
+                const { result, proxyType } = await this.runProxy(params, logger, req.method, req.headers);
 
                 const proxyTypeParams: ProxyTypeParams = { ...params, proxyType };
 
@@ -213,13 +222,16 @@ class SsrProxy {
 
         // Listen
         app.listen(this.config.port!, this.config.hostname!, () => {
-            Logger.info(`\nSSRProxy listening on ${this.config.hostname!}:${this.config.port!}\nProxy to ${this.config.targetRoute!}\n`);
+            Logger.info(`\nSSRProxy listening on http://${this.config.hostname!}:${this.config.port!}\nProxy to ${this.config.targetRoute!}\n`);
         });
 
         return app;
     }
 
-    private async runProxy(params: ProxyParams, logger: Logger, userAgent?: string, httpMethod?: string, httpHeaders?: any) {
+    private async runProxy(params: ProxyParams, logger: Logger, method?: string, headers?: any) {
+        headers = headers || {};
+        method = method || 'GET';
+
         let result: ProxyResult = {};
         let proxyType: ProxyType = this.config.proxyOrder![0];
 
@@ -228,9 +240,9 @@ class SsrProxy {
 
             try {
                 if (proxyType === ProxyType.SsrProxy) {
-                    result = await this.runSsrProxy(params, logger, userAgent);
+                    result = await this.runSsrProxy(params, logger, headers);
                 } else if (proxyType === ProxyType.HttpProxy) {
-                    result = await this.runHttpProxy(params, logger, httpMethod || 'GET', httpHeaders);
+                    result = await this.runHttpProxy(params, logger, method, headers);
                 } else if (proxyType === ProxyType.StaticProxy) {
                     result = await this.runStaticProxy(params, logger);
                 } else {
@@ -247,7 +259,7 @@ class SsrProxy {
         return { result, proxyType };
     }
 
-    private async runSsrProxy(params: ProxyParams, logger: Logger, useAgent?: string): Promise<ProxyResult> {
+    private async runSsrProxy(params: ProxyParams, logger: Logger, headers: any): Promise<ProxyResult> {
         const cSsr = this.config.ssr!;
         const cacheKey = `${ProxyType.SsrProxy}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.SsrProxy };
@@ -262,7 +274,7 @@ class SsrProxy {
         try {
             logger.debug(`Using SsrProxy: ${params.targetUrl}`);
 
-            logger.info(`Bot Access | URL: ${params.sourceUrl} | User Agent: ${useAgent}`);
+            logger.info(`Bot Access | URL: ${params.sourceUrl} | User Agent: ${headers['user-agent']}`);
 
             // Try use Cache
 
@@ -274,18 +286,17 @@ class SsrProxy {
 
             // Try use SsrProxy
 
-            let { text, ttRenderMs, error } = await this.tryRender(params.targetUrl, logger);
-
-            // TODO: response headers
+            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl, logger, headers);
 
             const isSuccess = error == null;
 
-            logger.info(`SSR Result | Success: ${isSuccess} | Render Time: ${ttRenderMs}ms | Message: ${error || 'Success'}`);
+            logger.info(`SSR Result | Render Time: ${ttRenderMs}ms | Success: ${isSuccess}${isSuccess ? '' : ` | Message: ${error}`}`);
 
             if (!isSuccess) return { error };
             if (text == null) text = '';
 
-            const headers = {
+            const resHeaders = {
+                // ...(ssrHeaders || {}), // TODO: return response headers?
                 'Server-Timing': `Prerender;dur=${ttRenderMs};desc="Headless render time (ms)"`,
             };
             
@@ -293,7 +304,7 @@ class SsrProxy {
 
             this.trySaveCache(text, contentType, cacheKey, typeParams, logger);
 
-            return { text, contentType, headers };
+            return { text, contentType, headers: resHeaders };
         } catch (err: any) {
             logger.error('SsrError', err, false);
             return { error: err };
@@ -325,20 +336,19 @@ class SsrProxy {
 
             // Try use HttpProxy
 
-            const dataStream = await axios.request({
+            const request = await axios.request({
                 url: params.targetUrl,
                 method: method as any,
                 responseType: 'stream',
                 headers: headers as any,
-            }).then(r => r.data);
-
-            // TODO: response headers
+            });
 
             const contentType = this.getContentType(params.targetUrl);
 
-            this.trySaveCacheStream(dataStream, contentType, cacheKey, typeParams, logger);
+            this.trySaveCacheStream(request.data, contentType, cacheKey, typeParams, logger);
 
-            return { stream: dataStream, contentType };
+            return { stream: request.data, contentType };
+            // return { stream: request.data, headers: request.headers }; // TODO: return response headers?
         } catch (err: any) {
             const error = err?.response?.data ? await streamToString(err.response.data).catch(err => err) : err;
             logger.error('HttpProxyError', error, false);
@@ -440,7 +450,7 @@ class SsrProxy {
         }
     }
 
-    private async tryRender(urlStr: string, logger: Logger): Promise<SsrRenderResult> {
+    private async tryRender(urlStr: string, logger: Logger, headers: any): Promise<SsrRenderResult> {
         const cSsr = this.config.ssr!;
         const start = Date.now();
 
@@ -454,27 +464,41 @@ class SsrProxy {
             // Indicate headless render to client
             // e.g. use to disable some features if ssr
             const url = new URL(urlStr);
-            url.searchParams.set('headless', 'true');
+
+            for (let param of cSsr.queryParams!)
+                url.searchParams.set(param.key, param.value);
 
             logger.debug('SSR: Connecting');
 
             const browser = await puppeteer.connect({ browserWSEndpoint: this.browserWSEndpoint });
             const page = await browser.newPage();
 
-            // Intercept network requests.
+            // Intercept network requests
+            let interceptCount = 0;
             await page.setRequestInterception(true);
             page.on('request', req => {
+                interceptCount++;
+
+                const reqType = req.resourceType();
+
                 // Ignore requests for resources that don't produce DOM (e.g. images, stylesheets, media)
                 const allowlist = ['document', 'script', 'xhr', 'fetch'];
-                if (!allowlist.includes(req.resourceType())) return req.abort();
+                if (!allowlist.includes(reqType)) return req.abort();
+
+                // Custom headers
+                let origHeaders = req.headers();
+                if (interceptCount === 1) {
+                    origHeaders = { ...(headers || {}), ...(origHeaders || {}) };
+                    delete origHeaders['host'];
+                }
 
                 // Pass through all other requests
-                req.continue();
+                req.continue({ headers: origHeaders });
             });
 
-            // TODO: inject headers
+            const response = await page.goto(url.toString(), { waitUntil: 'networkidle0' });
 
-            await page.goto(url.toString(), { waitUntil: 'networkidle0' });
+            const resHeaders = response.headers();
 
             logger.debug('SSR: Connected');
 
@@ -487,7 +511,7 @@ class SsrProxy {
 
             const ttRenderMs = Date.now() - start;
 
-            return { text, ttRenderMs };
+            return { text, headers: resHeaders, ttRenderMs };
         } catch (err: any) {
             let error = ((err && (err.message || err.toString())) || 'Proxy Error');
             const ttRenderMs = Date.now() - start;
@@ -501,5 +525,3 @@ class SsrProxy {
         return type;
     }
 }
-
-export = SsrProxy;

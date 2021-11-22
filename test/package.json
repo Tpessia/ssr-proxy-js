@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "setup": "npm install",
-    "start": "nodemon index.js",
+    "start": "nodemon --watch ./ --watch ../ index.js",
+    "start:ts": "ts-node-dev --project tsconfig.json index.ts",
     "http-test": "node http-test.js"
   },
   "dependencies": {
@@ -11,6 +12,8 @@
     "ssr-proxy-js": "file:../"
   },
   "devDependencies": {
-    "nodemon": "^2.0.15"
+    "nodemon": "^2.0.15",
+    "ts-node-dev": "^1.1.8",
+    "typescript": "^4.4.4"
   }
 }

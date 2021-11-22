@@ -13,13 +13,11 @@
   },
   "author": "Thiago Pessia",
   "license": "MIT",
-  "main": "dist/ssr-proxy.js",
-  "types": "dist/ssr-proxy.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "prebuild:dev": "rimraf dist",
-    "build:dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --mode development --watch",
-    "prebuild": "rimraf dist",
-    "build": "cross-env NODE_ENV=production webpack --config webpack.config.js --mode production"
+    "build:dev": "rimraf dist && cross-env NODE_ENV=development webpack --config webpack.config.js --mode development --watch",
+    "build": "rimraf dist && cross-env NODE_ENV=production webpack --config webpack.config.js --mode production"
   },
   "dependencies": {
     "axios": "^0.24.0",
