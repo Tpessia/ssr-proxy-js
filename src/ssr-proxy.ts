@@ -33,7 +33,7 @@ import puppeteer from 'puppeteer';
 import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
-import { CacheItem, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
+import { CacheItem, LogLevel, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
 import { promiseParallel, streamToString } from './utils';
 
 export class SsrProxy {
@@ -49,22 +49,6 @@ export class SsrProxy {
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
             failStatus: params => 404,
             isBot: (method: string, url: string, headers: any) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
-            cache: {
-                shouldUse: params => params.proxyType === ProxyType.SsrProxy,
-                maxEntries: 50,
-                maxByteSize: 50 * 1024 * 1024, // 50MB
-                expirationMs: 10 * 60 * 1000, // 10 minutes
-                autoRefresh: {
-                    enabled: false,
-                    shouldUse: () => true,
-                    proxyOrder: [ProxyType.SsrProxy],
-                    initTimeoutMs: 5 * 1000, // 5 seconds
-                    intervalMs: 5 * 60 * 1000, // 4 minutes
-                    parallelism: 5,
-                    routes: [],
-                    isBot: true,
-                },
-            },
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
                 browserConfig: {
@@ -78,21 +62,38 @@ export class SsrProxy {
             },
             httpProxy: {
                 shouldUse: params => true,
+                queryParams: [],
             },
             static: {
                 shouldUse: params => true,
-                dirPath: './dist',
+                dirPath: path.join(path.dirname(process.argv[1]), 'public'),
                 useIndexFile: path => path.endsWith('/'),
                 indexFile: 'index.html',
             },
             log: {
-                level: 2,
+                level: LogLevel.Info,
                 console: {
                     enabled: true,
                 },
                 file: {
                     enabled: true,
                     dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
+                },
+            },
+            cache: {
+                shouldUse: params => params.proxyType === ProxyType.SsrProxy,
+                maxEntries: 50,
+                maxByteSize: 50 * 1000 * 1000, // 50MB
+                expirationMs: 10 * 60 * 1000, // 10 minutes
+                autoRefresh: {
+                    enabled: false,
+                    shouldUse: () => true,
+                    proxyOrder: [ProxyType.SsrProxy],
+                    initTimeoutMs: 5 * 1000, // 5 seconds
+                    intervalMs: 5 * 60 * 1000, // 5 minutes
+                    parallelism: 5,
+                    isBot: true,
+                    routes: [],
                 },
             },
         };
@@ -336,8 +337,14 @@ export class SsrProxy {
 
             // Try use HttpProxy
 
+            const url = new URL(params.targetUrl);
+
+            // Indicate http proxy to client
+            for (let param of cHttpProxy.queryParams!)
+                url.searchParams.set(param.key, param.value);
+
             const request = await axios.request({
-                url: params.targetUrl,
+                url: url.toString(),
                 method: method as any,
                 responseType: 'stream',
                 headers: headers as any,
@@ -384,7 +391,7 @@ export class SsrProxy {
             if (cStatic.useIndexFile!(params.sourceUrl))
                 params.sourceUrl = `${params.sourceUrl}/${cStatic.indexFile!}`.replace(/\/\//g, '/');
 
-            const filePath = path.join(path.dirname(process.argv[1]), cStatic.dirPath!, params.sourceUrl);
+            const filePath = path.join(cStatic.dirPath!, params.sourceUrl);
 
             logger.debug(`Static Path: ${filePath}`);
 
@@ -461,10 +468,10 @@ export class SsrProxy {
                 this.browserWSEndpoint = await browser.wsEndpoint();
             }
 
-            // Indicate headless render to client
-            // e.g. use to disable some features if ssr
             const url = new URL(urlStr);
 
+            // Indicate headless render to client
+            // e.g. use to disable some features if ssr
             for (let param of cSsr.queryParams!)
                 url.searchParams.set(param.key, param.value);
 

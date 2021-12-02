@@ -5,12 +5,12 @@
 
 A Server-Side Rendering Proxy focused on customization and flexibility!
 
-Allows 3 types of proxies / fallbacks:
+Allows 3 types of proxies:
 - SSR Proxy
 - HTTP Proxy
 - Static File Serving
 
-Also comes with optional native caching!
+Also comes with optional caching!
 
 ## Example
 
@@ -33,26 +33,6 @@ const ssrProxy = new SsrProxy({
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
     failStatus: params => 404,
     // isBot: (method, url, headers) => true,
-    cache: {
-        enabled: true,
-        shouldUse: params => params.proxyType === 'SsrProxy',
-        maxEntries: 50,
-        maxByteSize: 50 * 1024 * 1024, // 50MB
-        expirationMs: 10 * 60 * 1000, // 10 minutes
-        autoRefresh: {
-            enabled: false,
-            shouldUse: () => true,
-            proxyOrder: ['SsrProxy'],
-            initTimeoutMs: 5 * 1000, // 5 seconds
-            intervalMs: 5 * 60 * 1000, // 5 minutes
-            parallelism: 5,
-            routes: [
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/` },
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/login` },
-            ],
-            isBot: true,
-        },
-    },
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
         browserConfig: {
@@ -81,6 +61,26 @@ const ssrProxy = new SsrProxy({
         file: {
             enabled: true,
             dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
+        },
+    },
+    cache: {
+        enabled: true,
+        shouldUse: params => params.proxyType === 'SsrProxy',
+        maxEntries: 50,
+        maxByteSize: 50 * 1024 * 1024, // 50MB
+        expirationMs: 10 * 60 * 1000, // 10 minutes
+        autoRefresh: {
+            enabled: true,
+            shouldUse: () => true,
+            proxyOrder: ['SsrProxy'],
+            initTimeoutMs: 5 * 1000, // 5 seconds
+            intervalMs: 5 * 60 * 1000, // 5 minutes
+            parallelism: 5,
+            isBot: true,
+            routes: [
+                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/` },
+                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/login` },
+            ],
         },
     },
 });
