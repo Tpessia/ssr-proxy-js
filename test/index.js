@@ -3,11 +3,10 @@ const path = require('path');
 const { SsrProxy } = require('ssr-proxy-js');
 
 const BASE_PROXY_ROUTE = 'localhost:3000';
-const STATIC_FILES_PATH = './public';
+const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
+const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
-const loggingPath = path.join(os.tmpdir(), 'ssr-proxy/logs');
-
-console.log(`\nLogging at: ${loggingPath}`);
+console.log(`\nLogging at: ${LOGGING_PATH}`);
 
 const ssrProxy = new SsrProxy({
     port: 8080,
@@ -43,7 +42,7 @@ const ssrProxy = new SsrProxy({
         },
         file: {
             enabled: true,
-            dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
+            dirPath: LOGGING_PATH,
         },
     },
     cache: {

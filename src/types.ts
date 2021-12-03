@@ -54,7 +54,7 @@ export interface SsrProxyConfig {
      * Proxy server hostname
      * @default '0.0.0.0'
      */
-    hostname?: string,
+    hostname?: string;
     /**
      * Target route for SSR and HTTP proxy
      * 
@@ -109,8 +109,8 @@ export interface SsrProxyConfig {
          * [{ key: 'headless', value: 'true' }]
          */
         queryParams?: {
-            key: string,
-            value: string,
+            key: string;
+            value: string;
         }[];
     };
     /**
@@ -130,8 +130,8 @@ export interface SsrProxyConfig {
          * []
          */
         queryParams?: {
-            key: string,
-            value: string,
+            key: string;
+            value: string;
         }[];
     };
     /**
@@ -272,17 +272,17 @@ export interface SsrProxyConfig {
                  * Route HTTP Method
                  * @example 'GET'
                  */
-                method: string,
+                method: string;
                 /**
                  * Route URL
                  * @example 'http://localhost:80/example/
                  */
-                url: string,
+                url: string;
                 /**
                  * Route Headers
                  * @example { 'X-Example': 'Test' }
                  */
-                headers?: any,
+                headers?: any;
             }[];
         };
     };

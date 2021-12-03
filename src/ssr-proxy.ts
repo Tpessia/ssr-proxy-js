@@ -66,7 +66,7 @@ export class SsrProxy {
             },
             static: {
                 shouldUse: params => true,
-                dirPath: path.join(path.dirname(process.argv[1]), 'public'),
+                dirPath: path.join(process.cwd(), 'public'),
                 useIndexFile: path => path.endsWith('/'),
                 indexFile: 'index.html',
             },
@@ -98,9 +98,13 @@ export class SsrProxy {
             },
         };
 
-        this.config = deepmerge<SsrProxyConfig>(this.config, config, {
-            arrayMerge: (destArray, srcArray, opts) => srcArray,
-        });
+        if (config) {
+            this.config = deepmerge<SsrProxyConfig>(this.config, config, {
+                arrayMerge: (destArray, srcArray, opts) => srcArray,
+            });
+        } else {
+            console.log('No configuration found for ssr-proxy-js!');
+        }
 
         this.config.targetRoute! = `${this.config.targetRoute}/`.replace(/\/\//g, '/');;
 
@@ -223,7 +227,9 @@ export class SsrProxy {
 
         // Listen
         app.listen(this.config.port!, this.config.hostname!, () => {
-            Logger.info(`\nSSRProxy listening on http://${this.config.hostname!}:${this.config.port!}\nProxy to ${this.config.targetRoute!}\n`);
+            Logger.info('\n----- Starting SSR Proxy -----');
+            Logger.info(`Listening on http://${this.config.hostname!}:${this.config.port!}`);
+            Logger.info(`Proxying to ${this.config.targetRoute!}\n`);
         });
 
         return app;
