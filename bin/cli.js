@@ -2,7 +2,7 @@
 
 // npx ssr-proxy-js
 // npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-// npx ssr-proxy-js --port=8080 --hostname=0.0.0.0 --targetRoute=localhost:3000
+// npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000
 
 const fs = require('fs');
 const path = require('path');

@@ -1,16 +1,44 @@
 [![NuGet Status](https://img.shields.io/npm/v/ssr-proxy-js)](https://www.npmjs.com/package/ssr-proxy-js)
 [![NuGet Status](https://img.shields.io/npm/dm/ssr-proxy-js)](https://www.npmjs.com/package/ssr-proxy-js)
 
-# ssr-proxy.js
+# SSRProxy.js
 
 A Server-Side Rendering Proxy focused on customization and flexibility!
 
-Allows 3 types of proxies:
-- SSR Proxy
-- HTTP Proxy
-- Static File Serving
+Server-Side Rendering, or SSR for short, is a technique used to serve Single-Page Applications (SPAs, e.g. React.js, Vue.js and Angular based websites) with Web Crawlers in mind, such as Googlebot. Crawlers are used everywhere in the internet to a variety of objectives, with the most known being for indexing the web for search engines, which is done by companies such as Google (Googlebot), Bing (Msnbot) and DuckDuckGo (DuckDuckBot).
 
-Also comes with optional caching!
+The main problem of serving SPAs "normally" (i.e. Client-Side Rendering) is that when your website is accessed by a Web Crawler, it's usually only able to read the source HTML code, which most probably does not represent your actual website. In case of a React App, for example, a Crawler might be only able to interpret your website like so:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>React App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
+```
+
+For the contents of a SPA to be correct, the JavaScript files should be loaded and executed by the browser, and that's where Server-Side Rendering plays a big role. SSR will receive the HTTP request from the client, create a browser instance, load the page just like we do while surfing the web, and just then return the actual rendered HTML to the request, after the SPA is fully loaded.
+
+The implemantation of this package is hugelly inspired by a article from Google, using Pupperteer as it's engine:
+https://developers.google.com/web/tools/puppeteer/articles/ssr
+
+The main problem regarding the workflow described above is that the process of rendering the web page through a browser takes some time, so if done incorrectly, it might have a big impact on the users experience. That's why this package also comes with two essencial feature: **Caching** and **Fallbacks**.
+
+### Caching
+
+Caching allows us to increase the performance of the web serving by preventing excessive new renders for web pages that have been accessed recently. Caching is highly configurable to allow total control of the workflow, for example, it's possible to decide if cache should or shouldn't be used each time the website is accessed, with the "shouldUse" option. Also, it's possible to configure a automatic cache refresh, using the "cache.autoRefresh" configuration.
+
+### Fallbacks
+
+In case of a human user access, we can serve the web site the "normal" way, without asking the SSR to pre-render the page. For that it's possible to use 3 types of proxies: SSR Proxy, HTTP Proxy or Static File Serving, in any order that you see fit. Firstly, the order of priority should be configured with the "proxyOrder" option, so for example, if configured as ['SsrProxy', 'HttpProxy', 'StaticProxy'], "ssr.shouldUse" will ask if SSR should be used, if it returns false, then "httpProxy.shouldUse" will ask if HTTP Proxy should be used, and finally, "static.shouldUse" will ask if Static File Serving should be used. If the return of all proxy options is false, or if one of then returns a exception (e.g. page not found), the web server will return a empty HTTP response with status equals to the return of the "failStatus" callback.
+
+> Note: to ensure the best security and performance, it's adivisable to use this proxy behind a reverse proxy, such as [Nginx](https://www.nginx.com/).
 
 ## Simple Example
 
@@ -31,11 +59,11 @@ ssrProxy.start();
 ```bash
 npx ssr-proxy-js
 npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-npx ssr-proxy-js --port=8080 --hostname=0.0.0.0 --targetRoute=localhost:3000
+npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000
 ```
 
 **Config**
-```json
+```javascript
 // ./ssr-proxy-js.config.json
 
 {
