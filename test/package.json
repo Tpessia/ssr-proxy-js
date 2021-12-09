@@ -5,12 +5,14 @@
     "setup": "npm install",
     "start": "nodemon --watch ./ --watch ../ index.js",
     "start:ts": "ts-node-dev --project tsconfig.json index.ts",
-    "http-test": "node http-test.js"
+    "http-test": "node http-test.js",
+    "serve": "npx http-server ./public -p 3000 -a 0.0.0.0"
   },
   "dependencies": {
     "axios": "^0.24.0",
-    "ssr-proxy-js-local": "file:../",
-    "ssr-proxy-js": "^1.0.1"
+    "express": "^4.17.1",
+    "ssr-proxy-js": "^1.0.1",
+    "ssr-proxy-js-local": "file:../"
   },
   "devDependencies": {
     "nodemon": "^2.0.15",

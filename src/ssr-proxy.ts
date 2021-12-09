@@ -48,6 +48,7 @@ export class SsrProxy {
             targetRoute: 'localhost:80',
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
             failStatus: params => 404,
+            customError: undefined,
             isBot: (method: string, url: string, headers: any) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
@@ -59,6 +60,8 @@ export class SsrProxy {
                     key: 'headless',
                     value: 'true',
                 }],
+                allowedResources: ['document', 'script', 'xhr', 'fetch'],
+                waitUntil: 'networkidle0',
             },
             httpProxy: {
                 shouldUse: params => true,
@@ -211,8 +214,8 @@ export class SsrProxy {
                 res.status($this.config.failStatus!(params));
                 res.contentType('text/plain');
                 for (let key in result.headers!) res.set(key, result.headers![key]);
-                const error = Logger.errorStr(result.error!);
-                return res.send(error);
+                const errMsg = $this.config.customError ? $this.config.customError(result.error!) : Logger.errorStr(result.error!);
+                return res.send(errMsg);
             }
         });
 
@@ -221,7 +224,8 @@ export class SsrProxy {
             Logger.error('Error', err, true);
             res.contentType('text/plain');
             res.status(err.status || 500);
-            res.send(Logger.errorStr(err));
+            const errMsg = this.config.customError ? this.config.customError(err) : Logger.errorStr(err);
+            res.send(errMsg);
             next();
         });
 
@@ -229,7 +233,9 @@ export class SsrProxy {
         app.listen(this.config.port!, this.config.hostname!, () => {
             Logger.info('\n----- Starting SSR Proxy -----');
             Logger.info(`Listening on http://${this.config.hostname!}:${this.config.port!}`);
-            Logger.info(`Proxying to ${this.config.targetRoute!}\n`);
+            Logger.info(`Proxy: ${this.config.targetRoute!}`);
+            Logger.info(`DirPath: ${this.config.static!.dirPath!}`);
+            Logger.info(`ProxyOrder: ${this.config.proxyOrder!}\n`);
         });
 
         return app;
@@ -401,6 +407,9 @@ export class SsrProxy {
 
             logger.debug(`Static Path: ${filePath}`);
 
+            if (!fs.existsSync(filePath))
+                throw new Error(`File Not Found: ${filePath}`);
+
             const fileStream = fs.createReadStream(filePath);
             
             const contentType = this.getContentType(filePath);
@@ -492,11 +501,9 @@ export class SsrProxy {
             page.on('request', req => {
                 interceptCount++;
 
-                const reqType = req.resourceType();
-
                 // Ignore requests for resources that don't produce DOM (e.g. images, stylesheets, media)
-                const allowlist = ['document', 'script', 'xhr', 'fetch'];
-                if (!allowlist.includes(reqType)) return req.abort();
+                const reqType = req.resourceType();
+                if (!cSsr.allowedResources.includes(reqType)) return req.abort();
 
                 // Custom headers
                 let origHeaders = req.headers();
@@ -509,7 +516,7 @@ export class SsrProxy {
                 req.continue({ headers: origHeaders });
             });
 
-            const response = await page.goto(url.toString(), { waitUntil: 'networkidle0' });
+            const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil });
 
             const resHeaders = response.headers();
 

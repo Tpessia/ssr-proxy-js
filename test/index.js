@@ -1,6 +1,6 @@
 const os = require('os');
 const path = require('path');
-const { SsrProxy } = require('ssr-proxy-js');
+const { SsrProxy } = require('ssr-proxy-js-local');
 
 const BASE_PROXY_ROUTE = 'localhost:3000';
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
@@ -14,6 +14,7 @@ const ssrProxy = new SsrProxy({
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
     failStatus: params => 404,
+    // customError: err => err.toString(),
     // isBot: (method, url, headers) => true,
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
@@ -25,6 +26,8 @@ const ssrProxy = new SsrProxy({
             key: 'headless',
             value: 'true',
         }],
+        allowedResources: ['document', 'script', 'xhr', 'fetch'],
+        waitUntil: 'networkidle0',
     },
     httpProxy: {
         shouldUse: params => true,
@@ -68,3 +71,27 @@ const ssrProxy = new SsrProxy({
 });
 
 ssrProxy.start();
+
+
+
+// Server
+
+const express = require('express');
+const app = express();
+const port = 3000;
+
+app.get('/', (req, res) => {
+  res.send('Hello World!');
+});
+
+app.get('/301', (req, res) => {
+    res.redirect(301, '/');
+});
+
+app.get('/302', (req, res) => {
+    res.redirect(302, '/');
+});
+
+app.listen(port, () => {
+  console.log(`Express listening at http://localhost:${port}`);
+});

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+// cd test && npx ssr-proxy-js-local
+
 // npx ssr-proxy-js
 // npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-// npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000
+// npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy --log.level=3
 
 const fs = require('fs');
 const path = require('path');

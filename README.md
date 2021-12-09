@@ -5,7 +5,7 @@
 
 A Server-Side Rendering Proxy focused on customization and flexibility!
 
-Server-Side Rendering, or SSR for short, is a technique used to serve Single-Page Applications (SPAs, e.g. React.js, Vue.js and Angular based websites) with Web Crawlers in mind, such as Googlebot. Crawlers are used everywhere in the internet to a variety of objectives, with the most known being for indexing the web for search engines, which is done by companies such as Google (Googlebot), Bing (Msnbot) and DuckDuckGo (DuckDuckBot).
+Server-Side Rendering, or SSR for short, is a technique used to serve Single-Page Applications (SPAs, e.g. React.js, Vue.js and Angular based websites) with Web Crawlers in mind, such as Googlebot. Crawlers are used everywhere in the internet to a variety of objectives, with the most known being for indexing the web for search engines, which is done by companies such as Google (Googlebot), Bing (Bingbot) and DuckDuckGo (DuckDuckBot).
 
 The main problem of serving SPAs "normally" (i.e. Client-Side Rendering) is that when your website is accessed by a Web Crawler, it's usually only able to read the source HTML code, which most probably does not represent your actual website. In case of a React App, for example, a Crawler might be only able to interpret your website like so:
 
@@ -25,7 +25,7 @@ The main problem of serving SPAs "normally" (i.e. Client-Side Rendering) is that
 
 For the contents of a SPA to be correct, the JavaScript files should be loaded and executed by the browser, and that's where Server-Side Rendering plays a big role. SSR will receive the HTTP request from the client, create a browser instance, load the page just like we do while surfing the web, and just then return the actual rendered HTML to the request, after the SPA is fully loaded.
 
-The implemantation of this package is hugelly inspired by a article from Google, using Pupperteer as it's engine:
+The implemantation of this package is hugelly inspired by an article from Google, using Pupperteer as it's engine:
 https://developers.google.com/web/tools/puppeteer/articles/ssr
 
 The main problem regarding the workflow described above is that the process of rendering the web page through a browser takes some time, so if done incorrectly, it might have a big impact on the users experience. That's why this package also comes with two essencial feature: **Caching** and **Fallbacks**.
@@ -59,7 +59,7 @@ ssrProxy.start();
 ```bash
 npx ssr-proxy-js
 npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000
+npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy
 ```
 
 **Config**
@@ -91,6 +91,7 @@ const ssrProxy = new SsrProxy({
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
     failStatus: params => 404,
+    // customError: err => err.toString(),
     // isBot: (method, url, headers) => true,
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
@@ -102,6 +103,8 @@ const ssrProxy = new SsrProxy({
             key: 'headless',
             value: 'true',
         }],
+        allowedResources: ['document', 'script', 'xhr', 'fetch'],
+        waitUntil: 'networkidle0',
     },
     httpProxy: {
         shouldUse: params => true,
@@ -185,6 +188,12 @@ interface SsrProxyConfig {
      */
     failStatus?: (params: ProxyTypeParams) => number;
     /**
+     * Custom error message handler
+     * @example err => err.toString()
+     * @default undefined
+     */
+    customError?: (err: any) => string;
+    /**
      * Custom implementation to define whether the client is a bot (e.g. Googlebot)
      * 
      * Defaults to https://www.npmjs.com/package/isbot
@@ -218,6 +227,18 @@ interface SsrProxyConfig {
             key: string;
             value: string;
         }[];
+        /**
+         * Which resource types to load
+         * @default
+         * ['document', 'script', 'xhr', 'fetch']
+         */
+        allowedResources: ResourceType[];
+        /**
+         * Which events to wait before returning the rendered HTML
+         * @default
+         * 'networkidle0'
+         */
+        waitUntil: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
     };
     /**
      * HTTP Proxy configuration

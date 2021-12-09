@@ -1,4 +1,4 @@
-import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Product } from 'puppeteer';
+import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Product, PuppeteerLifeCycleEvent, ResourceType } from 'puppeteer';
 import { Stream } from 'stream';
 
 // SSR Proxy
@@ -79,6 +79,12 @@ export interface SsrProxyConfig {
      */
     failStatus?: (params: ProxyTypeParams) => number;
     /**
+     * Custom error message handler
+     * @example err => err.toString()
+     * @default undefined
+     */
+    customError?: (err: any) => string;
+    /**
      * Custom implementation to define whether the client is a bot (e.g. Googlebot)
      * 
      * Defaults to https://www.npmjs.com/package/isbot
@@ -112,6 +118,18 @@ export interface SsrProxyConfig {
             key: string;
             value: string;
         }[];
+        /**
+         * Which resource types to load
+         * @default
+         * ['document', 'script', 'xhr', 'fetch']
+         */
+        allowedResources: ResourceType[];
+        /**
+         * Which events to wait before returning the rendered HTML
+         * @default
+         * 'networkidle0'
+         */
+        waitUntil: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
     };
     /**
      * HTTP Proxy configuration
