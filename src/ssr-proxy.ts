@@ -43,6 +43,7 @@ export class SsrProxy {
 
     constructor(config: SsrProxyConfig) {
         this.config = {
+            // TODO: AllowRedirect: boolean, return without redirecting
             port: 8080,
             hostname: '0.0.0.0',
             targetRoute: 'localhost:80',
