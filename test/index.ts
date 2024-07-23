@@ -1,4 +1,4 @@
-import { LogLevel, SsrProxy, SsrProxyConfig } from 'ssr-proxy-js';
+import { LogLevel, SsrProxy, SsrProxyConfig } from 'ssr-proxy-js-local'; // ssr-proxy-js or ssr-proxy-js-local
 
 const config: SsrProxyConfig = {
     port: 8081,

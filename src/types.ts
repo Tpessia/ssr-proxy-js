@@ -77,13 +77,13 @@ export interface SsrProxyConfig {
      * Which HTTP response status code to return in case of an error
      * @default params => 404
      */
-    failStatus?: (params: ProxyTypeParams) => number;
+    failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
      * Custom error message handler
      * @example err => err.toString()
      * @default undefined
      */
-    customError?: (err: any) => string;
+    customError?: string | ((err: any) => string);
     /**
      * Custom implementation to define whether the client is a bot (e.g. Googlebot)
      * 
@@ -98,7 +98,7 @@ export interface SsrProxyConfig {
          * Indicates if the SSR Proxy should be used
          * @default params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl))
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Browser configuration used by Puppeteer
          * @default
@@ -139,7 +139,7 @@ export interface SsrProxyConfig {
          * Indicates if the HTTP Proxy should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Which query string params to include in the url before proxying
          * @example
@@ -160,7 +160,7 @@ export interface SsrProxyConfig {
          * Indicates if the Static File Serving should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Absolute path of the directory to serve
          * @default path.join(path.dirname(process.argv[1]), 'public')
@@ -224,7 +224,7 @@ export interface SsrProxyConfig {
          * Indicates if the caching should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyTypeParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyTypeParams) => boolean);
         /**
          * Defines the maximum number of pages to cache
          * @default 50
@@ -255,7 +255,7 @@ export interface SsrProxyConfig {
              * Indicates if the auto refresh should be used
              * @default params => true
              */
-            shouldUse?: () => boolean;
+            shouldUse?: boolean | (() => boolean);
             /**
              * Defines the order which the proxy service will follow in case of errors, similar to 'config.proxyOrder'
              * @default [ProxyType.SsrProxy]

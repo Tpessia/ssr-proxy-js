@@ -34,7 +34,7 @@ import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
 import { CacheItem, LogLevel, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
-import { promiseParallel, streamToString } from './utils';
+import { getOrCall, promiseParallel, streamToString } from './utils';
 
 export class SsrProxy {
     private config: SsrProxyConfig;
@@ -143,7 +143,7 @@ export class SsrProxy {
             const logger = new Logger(true);
 
             try {
-                if (!cAutoCache.shouldUse || !cAutoCache.shouldUse!() || !cAutoCache.routes?.length) return;
+                if (!cAutoCache.shouldUse || !getOrCall(cAutoCache.shouldUse) || !cAutoCache.routes?.length) return;
     
                 const routesStr = '> ' + cAutoCache.routes!.map(e => e.url).join('\n> ');
                 logger.info(`Refreshing Cache:\n${routesStr}`);
@@ -197,7 +197,7 @@ export class SsrProxy {
                 res.contentType(result.contentType!);
                 for (let key in result.headers) res.set(key, result.headers[key]);
                 return result.stream!.on('error', err => {
-                    res.status($this.config.failStatus!(params));
+                    res.status(getOrCall($this.config.failStatus, params)!);
                     // res.contentType('text/plain');
                     // const error = Logger.errorStr(result.error!);
                     return res.send();
@@ -212,10 +212,10 @@ export class SsrProxy {
             }
 
             async function sendFail(result: ProxyResult, params: ProxyTypeParams) {
-                res.status($this.config.failStatus!(params));
+                res.status(getOrCall($this.config.failStatus, params)!);
                 res.contentType('text/plain');
                 for (let key in result.headers!) res.set(key, result.headers![key]);
-                const errMsg = $this.config.customError ? $this.config.customError(result.error!) : Logger.errorStr(result.error!);
+                const errMsg = getOrCall($this.config.customError, result.error!) ?? Logger.errorStr(result.error!);
                 return res.send(errMsg);
             }
         });
@@ -225,7 +225,7 @@ export class SsrProxy {
             Logger.error('Error', err, true);
             res.contentType('text/plain');
             res.status(err.status || 500);
-            const errMsg = this.config.customError ? this.config.customError(err) : Logger.errorStr(err);
+            const errMsg = getOrCall(this.config.customError, err) ?? Logger.errorStr(err);
             res.send(errMsg);
             next();
         });
@@ -278,7 +278,7 @@ export class SsrProxy {
         const cacheKey = `${ProxyType.SsrProxy}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.SsrProxy };
 
-        const shouldUse = cSsr.shouldUse!(params);
+        const shouldUse = getOrCall(cSsr.shouldUse, params)!;
         if (!shouldUse) {
             const msg = 'Skipped SsrProxy';
             logger.debug(`${msg}: ${params.targetUrl}`);
@@ -330,7 +330,7 @@ export class SsrProxy {
         const cacheKey = `${ProxyType.HttpProxy}:${method}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.HttpProxy };
 
-        const shouldUse = cHttpProxy.shouldUse!(params);
+        const shouldUse = getOrCall(cHttpProxy.shouldUse, params)!;
         if (!shouldUse) {
             const msg = 'Skipped HttpProxy';
             logger.debug(`${msg}: ${params.targetUrl}`);
@@ -381,7 +381,7 @@ export class SsrProxy {
         const cacheKey = `${ProxyType.StaticProxy}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.StaticProxy };
 
-        const shouldUse = cStatic.shouldUse!(params);
+        const shouldUse = getOrCall(cStatic.shouldUse, params)!;
         if (!shouldUse) {
             const msg = 'Skipped StaticProxy';
             logger.debug(`${msg}: ${params.targetUrl}`);
@@ -427,7 +427,7 @@ export class SsrProxy {
     private tryGetCache(cacheKey: string, params: ProxyTypeParams, logger: Logger): CacheItem | null {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.shouldUse!(params) && this.proxyCache?.has(cacheKey);
+        const shouldUse = getOrCall(cCache.shouldUse, params)! && this.proxyCache?.has(cacheKey);
 
         if (shouldUse) {
             logger.debug(`Cache Hit: ${cacheKey}`);
@@ -444,7 +444,7 @@ export class SsrProxy {
     private trySaveCache(text: string, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.shouldUse!(params) && this.proxyCache!;
+        const shouldUse = getOrCall(cCache.shouldUse, params)! && this.proxyCache!;
 
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
@@ -456,7 +456,7 @@ export class SsrProxy {
     private trySaveCacheStream(stream: Stream, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
-        const shouldUse = cCache.shouldUse!(params) && this.proxyCache!;
+        const shouldUse = getOrCall(cCache.shouldUse, params)! && this.proxyCache!;
 
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
@@ -519,13 +519,13 @@ export class SsrProxy {
 
             const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil });
 
-            const resHeaders = response.headers();
+            const resHeaders = response?.headers();
 
             logger.debug('SSR: Connected');
 
             // Serialized text of page DOM
             const text = await page.content();
-
+console.log('text', text);
             await page.close();
 
             logger.debug('SSR: Closed');

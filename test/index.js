@@ -1,6 +1,6 @@
 const os = require('os');
 const path = require('path');
-const { SsrProxy } = require('ssr-proxy-js-local');
+const { SsrProxy } = require('ssr-proxy-js-local'); // ssr-proxy-js or ssr-proxy-js-local
 
 const BASE_PROXY_ROUTE = 'localhost:3000';
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');

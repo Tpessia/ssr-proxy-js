@@ -49,3 +49,8 @@ export function promiseParallel<T, TRej = Error>(tasks: (() => Promise<T>)[], co
         }
     });
 }
+
+export function getOrCall<T>(obj: T | ((...args: any[]) => T), ...args: any[]): T;
+export function getOrCall<T>(obj?: T | ((...args: any[]) => T), ...args: any[]): T | undefined {
+    return typeof obj === 'function' ? (obj as (...args: any[]) => T)?.(...args) : obj;
+}

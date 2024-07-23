@@ -415,3 +415,8 @@ interface SsrProxyConfig {
     };
 }
 ```
+
+## Release
+
+1. Commit new code
+2. npm run publish:np
