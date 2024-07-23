@@ -525,7 +525,7 @@ export class SsrProxy {
 
             // Serialized text of page DOM
             const text = await page.content();
-console.log('text', text);
+
             await page.close();
 
             logger.debug('SSR: Closed');
