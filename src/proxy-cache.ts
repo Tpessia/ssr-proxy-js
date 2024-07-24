@@ -19,6 +19,10 @@ export class ProxyCache {
         return this.cache.has(urlStr);
     }
 
+    keys() {
+        return this.cache.keys();
+    }
+
     get(urlStr: string): CacheItem | null {
         const entry = this.cache.get(urlStr);
         if (!entry) return null;

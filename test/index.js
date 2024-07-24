@@ -2,14 +2,14 @@ const os = require('os');
 const path = require('path');
 const { SsrProxy } = require('ssr-proxy-js-local'); // ssr-proxy-js or ssr-proxy-js-local
 
-const BASE_PROXY_ROUTE = 'localhost:3000';
+const BASE_PROXY_ROUTE = 'http://localhost:3000';
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
 const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`\nLogging at: ${LOGGING_PATH}`);
 
 const ssrProxy = new SsrProxy({
-    port: 8080,
+    httpPort: 8080,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
@@ -63,8 +63,8 @@ const ssrProxy = new SsrProxy({
             parallelism: 5,
             isBot: true,
             routes: [
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/` },
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/login` },
+                { method: 'GET', url: `${BASE_PROXY_ROUTE}/` },
+                { method: 'GET', url: `${BASE_PROXY_ROUTE}/login` },
             ],
         },
     },

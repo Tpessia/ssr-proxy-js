@@ -46,8 +46,8 @@ In case of a human user access, we can serve the web site the "normal" way, with
 const { SsrProxy } = require('ssr-proxy-js');
 
 const ssrProxy = new SsrProxy({
-    port: 8080,
-    targetRoute: 'localhost:3000'
+    httpPort: 8080,
+    targetRoute: 'http://localhost:3000'
 });
 
 ssrProxy.start();
@@ -59,7 +59,7 @@ ssrProxy.start();
 ```bash
 npx ssr-proxy-js
 npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy
+npx ssr-proxy-js --httpPort=8080 --targetRoute=http://localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy
 ```
 
 **Config**
@@ -68,7 +68,7 @@ npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000 --static.dirPath=./pub
 
 {
     "port": 8080,
-    "targetRoute": "localhost:3000"
+    "targetRoute": "http://localhost:3000"
 }
 ```
 
@@ -79,14 +79,14 @@ const os = require('os');
 const path = require('path');
 const { SsrProxy } = require('ssr-proxy-js');
 
-const BASE_PROXY_ROUTE = 'localhost:3000';
+const BASE_PROXY_ROUTE = 'http://localhost:3000';
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
 const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`\nLogging at: ${LOGGING_PATH}`);
 
 const ssrProxy = new SsrProxy({
-    port: 8080,
+    httpPort: 8080,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
@@ -140,8 +140,8 @@ const ssrProxy = new SsrProxy({
             parallelism: 5,
             isBot: true,
             routes: [
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/` },
-                { method: 'GET', url: `http://${BASE_PROXY_ROUTE}/login` },
+                { method: 'GET', url: `${BASE_PROXY_ROUTE}/` },
+                { method: 'GET', url: `${BASE_PROXY_ROUTE}/login` },
             ],
         },
     },
@@ -155,10 +155,25 @@ ssrProxy.start();
 ```typescript
 interface SsrProxyConfig {
     /**
-     * Proxy server port
+     * Proxy server http port
      * @default 8080
      */
-    port?: number;
+    httpPort?: number;
+    /**
+     * Proxy server https port
+     * @default 8443
+     */
+    httpsPort?: number;
+    /**
+     * Proxy server https key
+     * @default undefined
+     */
+    httpsKey?: string;
+    /**
+     * Proxy server https cert
+     * @default undefined
+     */
+    httpsCert?: string;
     /**
      * Proxy server hostname
      * @default '0.0.0.0'
@@ -168,7 +183,7 @@ interface SsrProxyConfig {
      * Target route for SSR and HTTP proxy
      * 
      * With the default configuration, http://0.0.0.0:8080 will proxy to http://localhost:80
-     * @default 'localhost:80'
+     * @default 'http://localhost:80'
      */
     targetRoute?: string;
     /**
@@ -186,19 +201,19 @@ interface SsrProxyConfig {
      * Which HTTP response status code to return in case of an error
      * @default params => 404
      */
-    failStatus?: (params: ProxyTypeParams) => number;
+    failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
      * Custom error message handler
      * @example err => err.toString()
      * @default undefined
      */
-    customError?: (err: any) => string;
+    customError?: string | ((err: any) => string);
     /**
      * Custom implementation to define whether the client is a bot (e.g. Googlebot)
      * 
      * Defaults to https://www.npmjs.com/package/isbot
      */
-    isBot?: (method: string, url: string, headers: any) => boolean;
+    isBot?: boolean | ((method: string, url: string, headers: any) => boolean);
     /**
      * Server-Side Rendering configuration
      */
@@ -207,7 +222,7 @@ interface SsrProxyConfig {
          * Indicates if the SSR Proxy should be used
          * @default params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl))
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Browser configuration used by Puppeteer
          * @default
@@ -232,13 +247,17 @@ interface SsrProxyConfig {
          * @default
          * ['document', 'script', 'xhr', 'fetch']
          */
-        allowedResources: ResourceType[];
+        allowedResources?: ResourceType[];
         /**
          * Which events to wait before returning the rendered HTML
-         * @default
-         * 'networkidle0'
+         * @default 'networkidle0'
          */
-        waitUntil: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
+        waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
+        /**
+         * Timeout
+         * @default 60000
+         */
+        timeout?: number;
     };
     /**
      * HTTP Proxy configuration
@@ -248,7 +267,7 @@ interface SsrProxyConfig {
          * Indicates if the HTTP Proxy should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Which query string params to include in the url before proxying
          * @example
@@ -260,6 +279,16 @@ interface SsrProxyConfig {
             key: string;
             value: string;
         }[];
+        /**
+         * Ignore https errors via rejectUnauthorized=false
+         * @default params => false
+         */
+        unsafeHttps?: boolean | ((params: ProxyParams) => boolean);
+        /**
+         * Timeout
+         * @default 60000
+         */
+        timeout?: number;
     };
     /**
      * Static File Serving configuration
@@ -269,7 +298,7 @@ interface SsrProxyConfig {
          * Indicates if the Static File Serving should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Absolute path of the directory to serve
          * @default path.join(path.dirname(process.argv[1]), 'public')
@@ -333,7 +362,7 @@ interface SsrProxyConfig {
          * Indicates if the caching should be used
          * @default params => true
          */
-        shouldUse?: (params: ProxyTypeParams) => boolean;
+        shouldUse?: boolean | ((params: ProxyTypeParams) => boolean);
         /**
          * Defines the maximum number of pages to cache
          * @default 50
@@ -364,7 +393,7 @@ interface SsrProxyConfig {
              * Indicates if the auto refresh should be used
              * @default params => true
              */
-            shouldUse?: () => boolean;
+            shouldUse?: boolean | (() => boolean);
             /**
              * Defines the order which the proxy service will follow in case of errors, similar to 'config.proxyOrder'
              * @default [ProxyType.SsrProxy]

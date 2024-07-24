@@ -4,7 +4,7 @@
 
 // npx ssr-proxy-js
 // npx ssr-proxy-js -c ./ssr-proxy-js.config.json
-// npx ssr-proxy-js --port=8080 --targetRoute=localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy --log.level=3
+// npx ssr-proxy-js --httpPort=8080 --targetRoute=http://localhost:3000 --static.dirPath=./public --proxyOrder=SsrProxy --proxyOrder=StaticProxy --log.level=3
 
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +18,7 @@ const { _: argv_, c: argv_c, config: argv_config, ...argv_rest } = argv;
 const explicitConfig = !!(argv_c || argv_config);
 
 const options = { };
-options.configPath = argv_c || argv_config || './ssr-proxy-js1.config.json';
+options.configPath = argv_c || argv_config || './ssr-proxy-js.config.json';
 options.configPath = path.resolve(process.cwd(), options.configPath);
 
 try {

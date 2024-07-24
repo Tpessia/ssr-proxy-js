@@ -27,7 +27,7 @@ export interface ProxyResult {
 export interface ProxyParams {
     isBot: boolean;
     sourceUrl: string;
-    targetUrl: string;
+    targetUrl: URL;
     lastError?: any;
 }
 
@@ -46,10 +46,25 @@ export type SsrBrowerConfig = LaunchOptions & BrowserLaunchArgumentOptions & Bro
  */
 export interface SsrProxyConfig {
     /**
-     * Proxy server port
+     * Proxy server http port
      * @default 8080
      */
-    port?: number;
+    httpPort?: number;
+    /**
+     * Proxy server https port
+     * @default 8443
+     */
+    httpsPort?: number;
+    /**
+     * Proxy server https key
+     * @default undefined
+     */
+    httpsKey?: string;
+    /**
+     * Proxy server https cert
+     * @default undefined
+     */
+    httpsCert?: string;
     /**
      * Proxy server hostname
      * @default '0.0.0.0'
@@ -59,7 +74,7 @@ export interface SsrProxyConfig {
      * Target route for SSR and HTTP proxy
      * 
      * With the default configuration, http://0.0.0.0:8080 will proxy to http://localhost:80
-     * @default 'localhost:80'
+     * @default 'http://localhost:80'
      */
     targetRoute?: string;
     /**
@@ -89,7 +104,7 @@ export interface SsrProxyConfig {
      * 
      * Defaults to https://www.npmjs.com/package/isbot
      */
-    isBot?: (method: string, url: string, headers: any) => boolean;
+    isBot?: boolean | ((method: string, url: string, headers: any) => boolean);
     /**
      * Server-Side Rendering configuration
      */
@@ -123,13 +138,17 @@ export interface SsrProxyConfig {
          * @default
          * ['document', 'script', 'xhr', 'fetch']
          */
-        allowedResources: ResourceType[];
+        allowedResources?: ResourceType[];
         /**
          * Which events to wait before returning the rendered HTML
-         * @default
-         * 'networkidle0'
+         * @default 'networkidle0'
          */
-        waitUntil: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
+        waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
+        /**
+         * Timeout
+         * @default 60000
+         */
+        timeout?: number;
     };
     /**
      * HTTP Proxy configuration
@@ -151,6 +170,16 @@ export interface SsrProxyConfig {
             key: string;
             value: string;
         }[];
+        /**
+         * Ignore https errors via rejectUnauthorized=false
+         * @default params => false
+         */
+        unsafeHttps?: boolean | ((params: ProxyParams) => boolean);
+        /**
+         * Timeout
+         * @default 60000
+         */
+        timeout?: number;
     };
     /**
      * Static File Serving configuration

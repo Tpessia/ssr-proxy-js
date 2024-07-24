@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "scripts": {
     "init": "npm install",
-    "start": "nodemon --watch ./ --watch ../ index.js",
-    "start:ts": "ts-node-dev --project tsconfig.json index.ts",
+    "build": "cd .. && npm run build",
+    "start": "npm run build && nodemon --watch ./ --watch ../ index.js",
+    "start:ts": "npm run build && ts-node-dev --project tsconfig.json index.ts",
+    "start:bin": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js -c ./ssr-proxy-js.config.json",
     "start:npx": "npx ssr-proxy-js -c ./ssr-proxy-js.config.json",
-    "http-test": "node http-test.js",
+    "test:axios": "node http-test.js",
+    "test:curl-bot": "curl -fsSL -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' -H 'Accept-Language: en-US,en;q=0.5' -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'Upgrade-Insecure-Requests: 1' 'http://0.0.0.0:8080/' > output.html && xdg-open output.html",
     "serve": "npx http-server ./public -p 3000 -a 0.0.0.0"
   },
   "dependencies": {
