@@ -198,6 +198,11 @@ interface SsrProxyConfig {
      */
     proxyOrder?: ProxyType[];
     /**
+     * Function for processing the proxy result before serving
+     * @default undefined
+     */
+    processor?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
+    /**
      * Which HTTP response status code to return in case of an error
      * @default params => 404
      */

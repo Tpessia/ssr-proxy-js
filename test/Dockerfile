@@ -14,8 +14,6 @@ RUN ls -la .
 
 RUN rm -rf /var/lib/apt/lists/*
 
-# USER nginx
-
 EXPOSE 8080
 
 CMD ["npm", "run", "start:npx"]

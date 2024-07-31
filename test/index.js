@@ -14,8 +14,8 @@ const ssrProxy = new SsrProxy({
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
     failStatus: params => 404,
-    // customError: err => err.toString(),
-    // isBot: (method, url, headers) => true,
+    customError: err => err.toString(),
+    isBot: (method, url, headers) => true,
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
         browserConfig: {

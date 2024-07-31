@@ -302,6 +302,8 @@ export class SsrProxy {
             if (result.error == null) break;
         }
 
+        if (this.config.processor != null) result = await this.config.processor(params, result);
+
         return { result, proxyType };
     }
 

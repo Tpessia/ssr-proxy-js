@@ -89,8 +89,13 @@ export interface SsrProxyConfig {
      */
     proxyOrder?: ProxyType[];
     /**
-     * Which HTTP response status code to return in case of an error
+     * Function for processing the proxy result before serving
      * @default params => 404
+     */
+    processor?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
+    /**
+     * Which HTTP response status code to return in case of an error
+     * @default undefined
      */
     failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
