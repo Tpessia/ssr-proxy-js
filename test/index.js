@@ -2,14 +2,15 @@ const os = require('os');
 const path = require('path');
 const { SsrProxy } = require('ssr-proxy-js-local'); // ssr-proxy-js or ssr-proxy-js-local
 
-const BASE_PROXY_ROUTE = 'http://localhost:3000';
+const BASE_PROXY_PORT = '8080';
+const BASE_PROXY_ROUTE = `http://localhost:${BASE_PROXY_PORT}`;
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
 const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`\nLogging at: ${LOGGING_PATH}`);
 
 const ssrProxy = new SsrProxy({
-    httpPort: 8080,
+    httpPort: 8081,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
@@ -49,7 +50,6 @@ const ssrProxy = new SsrProxy({
         },
     },
     cache: {
-        enabled: true,
         shouldUse: params => params.proxyType === 'SsrProxy',
         maxEntries: 50,
         maxByteSize: 50 * 1024 * 1024, // 50MB
@@ -78,7 +78,6 @@ ssrProxy.start();
 
 const express = require('express');
 const app = express();
-const port = 3000;
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
@@ -92,6 +91,6 @@ app.get('/302', (req, res) => {
     res.redirect(302, '/');
 });
 
-app.listen(port, () => {
-  console.log(`Express listening at http://localhost:${port}`);
+app.listen(BASE_PROXY_PORT, () => {
+  console.log(`Express listening at http://localhost:${BASE_PROXY_PORT}`);
 });

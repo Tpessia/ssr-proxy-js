@@ -1,0 +1,30 @@
+services:
+    web-server:
+        container_name: web-server
+        image: web-server
+        restart: always
+        build:
+            context: ../
+            dockerfile: ./docker/nginx.Dockerfile
+        ports:
+            - 8080:8080
+        networks:
+            - default
+        depends_on:
+            - ssr-proxy
+
+    ssr-proxy:
+        container_name: ssr-proxy
+        image: ssr-proxy
+        restart: always
+        build:
+            context: ../../
+            dockerfile: ./test/docker/ssr.Dockerfile
+        ports:
+            - 8081:8081
+        networks:
+            - default
+
+networks:
+  default:
+    driver: bridge

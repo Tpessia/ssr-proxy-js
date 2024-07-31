@@ -1,0 +1,50 @@
+{
+    "httpPort": 8081,
+    "hostname": "0.0.0.0",
+    "targetRoute": "http://web-server:8080",
+    "proxyOrder": ["SsrProxy","HttpProxy"],
+    "isBot": true,
+    "ssr": {
+      "browserConfig": {
+        "headless": true,
+        "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+      },
+      "queryParams": [{ "key": "headless", "value": "true" }],
+      "allowedResources": ["document", "script", "xhr", "fetch"],
+      "waitUntil": "networkidle0"
+    },
+    "httpProxy": {
+      "shouldUse": true
+    },
+    "static": {
+      "shouldUse": false
+    },
+    "log": {
+      "level": 3,
+      "console": {
+        "enabled": true
+      },
+      "file": {
+        "enabled": true,
+        "dirPath": "/tmp/ssr-proxy/logs"
+      }
+    },
+    "cache": {
+      "shouldUse": true,
+      "maxEntries": 50,
+      "maxByteSize": 52428800,
+      "expirationMs": 14400000,
+      "autoRefresh": {
+        "enabled": true,
+        "shouldUse": true,
+        "proxyOrder": ["SsrProxy","HttpProxy"],
+        "initTimeoutMs": 5000,
+        "intervalMs": 7200000,
+        "parallelism": 5,
+        "isBot": true,
+        "routes": [
+          { "method": "GET", "url": "http://web-server:8080/" }
+        ]
+      }
+    }
+  }

@@ -157,6 +157,7 @@ export class SsrProxy {
                     try {
                         const params: ProxyParams = { isBot: cAutoCache.isBot!, sourceUrl: route.url, targetUrl: new URL(route.url) };
                         const { result, proxyType } = await $this.runProxy(params, logger, route.method, route.headers);
+                        res('ok');
                     } catch (err) {
                         logger.error('CacheRefresh', err, false);
                         rej(err);
@@ -344,7 +345,7 @@ export class SsrProxy {
             if (text == null) text = '';
 
             const resHeaders = {
-                ...(ssrHeaders || {}), // TODO: return response headers?
+                ...(ssrHeaders || {}),
                 'Server-Timing': `Prerender;dur=${ttRenderMs};desc="Headless render time (ms)"`,
             };
             
@@ -388,10 +389,9 @@ export class SsrProxy {
             for (let param of cHttpProxy.queryParams!)
                 params.targetUrl.searchParams.set(param.key, param.value);
 
-            delete headers['host'];
-            delete headers['referer'];
+            this.fixReqHeaders(headers);
 
-            const request = await axios.request({
+            const response = await axios.request({
                 url: params.targetUrl.toString(),
                 method: method as any,
                 responseType: 'stream',
@@ -400,12 +400,15 @@ export class SsrProxy {
                 timeout: cHttpProxy.timeout,
             });
 
+            logger.debug(`HttpProxy result: ${response.statusText}`);
+
             const contentType = this.getContentType(params.targetUrl.pathname);
 
-            this.trySaveCacheStream(request.data, contentType, cacheKey, typeParams, logger);
+            this.trySaveCacheStream(response.data, contentType, cacheKey, typeParams, logger);
 
-            return { stream: request.data, contentType };
-            // return { stream: request.data, headers: request.headers }; // TODO: return response headers?
+            this.fixResHeaders(response.headers);
+
+            return { stream: response.data, headers: response.headers, contentType };
         } catch (err: any) {
             const error = err?.response?.data ? await streamToString(err.response.data).catch(err => err) : err;
             logger.error('HttpProxyError', error, false);
@@ -461,6 +464,96 @@ export class SsrProxy {
         }
     }
 
+    private async tryRender(urlStr: string, logger: Logger, headers: any): Promise<SsrRenderResult> {
+        const cSsr = this.config.ssr!;
+        const start = Date.now();
+
+        try {
+            if (!this.browserWSEndpoint) {
+                logger.debug('SSR: Creating browserWSEndpoint');
+                const browser = await puppeteer.launch(cSsr.browserConfig!);
+                this.browserWSEndpoint = await browser.wsEndpoint();
+            }
+
+            const url = new URL(urlStr);
+
+            // Indicate headless render to client
+            // e.g. use to disable some features if ssr
+            for (let param of cSsr.queryParams!)
+                url.searchParams.set(param.key, param.value);
+
+            logger.debug('SSR: Connecting');
+            const browser = await puppeteer.connect({ browserWSEndpoint: this.browserWSEndpoint });
+
+            logger.debug('SSR: New Page');
+            const page = await browser.newPage();
+
+            // Intercept network requests
+            let interceptCount = 0;
+            await page.setRequestInterception(true);
+            page.on('request', req => {
+                interceptCount++;
+
+                // Ignore requests for resources that don't produce DOM (e.g. images, stylesheets, media)
+                const reqType = req.resourceType();
+                if (!cSsr.allowedResources!.includes(reqType)) return req.abort();
+
+                // Custom headers
+                let origHeaders = req.headers();
+                if (interceptCount === 1) {
+                    origHeaders = { ...(headers || {}), ...(origHeaders || {}) };
+                    this.fixReqHeaders(origHeaders);
+                }
+
+                // Pass through all other requests
+                req.continue({ headers: origHeaders });
+            });
+
+            logger.debug('SSR: Accessing');
+            const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil, timeout: cSsr.timeout });
+            // await page.waitForNetworkIdle({ idleTime: 1000, timeout: cSsr.timeout });
+
+            const resHeaders = response?.headers();
+            this.fixResHeaders(resHeaders);
+
+            logger.debug('SSR: Connected');
+
+            // Serialized text of page DOM
+            const text = await page.content();
+
+            await page.close();
+
+            logger.debug('SSR: Closed');
+
+            const ttRenderMs = Date.now() - start;
+
+            return { text, headers: resHeaders, ttRenderMs };
+        } catch (err: any) {
+            let error = ((err && (err.message || err.toString())) || 'Proxy Error');
+            const ttRenderMs = Date.now() - start;
+            return { ttRenderMs, error };
+        }
+    }
+
+    private getContentType(path: string) {
+        const isHtml = () => /\.html$/.test(path) || !/\./.test(path)
+        const type = mime.lookup(path) || (isHtml() ? 'text/html' : 'text/plain');
+        return type;
+    }
+
+    private fixReqHeaders(headers: any) {
+        delete headers['host'];
+        delete headers['referer'];
+        delete headers['user-agent'];
+    }
+
+    private fixResHeaders(headers: any) {
+        // TODO: fix response headers
+        delete headers['content-encoding'];
+    }
+
+    // Cache
+
     private tryGetCache(cacheKey: string, params: ProxyTypeParams, logger: Logger): CacheItem | null {
         const cCache = this.config.cache!;
 
@@ -505,82 +598,5 @@ export class SsrProxy {
             const deleted = this.proxyCache.tryClear();
             if (deleted.length) logger.debug(`Cache Cleared: ${JSON.stringify(deleted)}`);
         }
-    }
-
-    private async tryRender(urlStr: string, logger: Logger, headers: any): Promise<SsrRenderResult> {
-        const cSsr = this.config.ssr!;
-        const start = Date.now();
-
-        try {
-            if (!this.browserWSEndpoint) {
-                logger.debug('SSR: Creating browserWSEndpoint');
-                const browser = await puppeteer.launch(cSsr.browserConfig!);
-                this.browserWSEndpoint = await browser.wsEndpoint();
-            }
-
-            const url = new URL(urlStr);
-
-            // Indicate headless render to client
-            // e.g. use to disable some features if ssr
-            for (let param of cSsr.queryParams!)
-                url.searchParams.set(param.key, param.value);
-
-            logger.debug('SSR: Connecting');
-            const browser = await puppeteer.connect({ browserWSEndpoint: this.browserWSEndpoint });
-
-            logger.debug('SSR: New Page');
-            const page = await browser.newPage();
-
-            // Intercept network requests
-            let interceptCount = 0;
-            await page.setRequestInterception(true);
-            page.on('request', req => {
-                interceptCount++;
-
-                // Ignore requests for resources that don't produce DOM (e.g. images, stylesheets, media)
-                const reqType = req.resourceType();
-                if (!cSsr.allowedResources!.includes(reqType)) return req.abort();
-
-                // Custom headers
-                let origHeaders = req.headers();
-                if (interceptCount === 1) {
-                    origHeaders = { ...(headers || {}), ...(origHeaders || {}) };
-                    delete origHeaders['host'];
-                    delete origHeaders['referer'];
-                }
-
-                // Pass through all other requests
-                req.continue({ headers: origHeaders });
-            });
-
-            logger.debug('SSR: Accessing');
-            const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil, timeout: cSsr.timeout });
-            // await page.waitForNetworkIdle({ idleTime: 1000, timeout: cSsr.timeout });
-
-            const resHeaders = response?.headers();
-
-            logger.debug('SSR: Connected');
-
-            // Serialized text of page DOM
-            const text = await page.content();
-
-            await page.close();
-
-            logger.debug('SSR: Closed');
-
-            const ttRenderMs = Date.now() - start;
-
-            return { text, headers: resHeaders, ttRenderMs };
-        } catch (err: any) {
-            let error = ((err && (err.message || err.toString())) || 'Proxy Error');
-            const ttRenderMs = Date.now() - start;
-            return { ttRenderMs, error };
-        }
-    }
-
-    private getContentType(path: string) {
-        const isHtml = () => /\.html$/.test(path) || !/\./.test(path)
-        const type = mime.lookup(path) || (isHtml() ? 'text/html' : 'text/plain');
-        return type;
     }
 }

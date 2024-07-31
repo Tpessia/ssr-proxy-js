@@ -90,12 +90,12 @@ export interface SsrProxyConfig {
     proxyOrder?: ProxyType[];
     /**
      * Function for processing the proxy result before serving
-     * @default params => 404
+     * @default undefined
      */
     processor?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
     /**
      * Which HTTP response status code to return in case of an error
-     * @default undefined
+     * @default params => 404
      */
     failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
@@ -256,7 +256,7 @@ export interface SsrProxyConfig {
     cache?: {
         /**
          * Indicates if the caching should be used
-         * @default params => true
+         * @default params => params.proxyType === ProxyType.SsrProxy
          */
         shouldUse?: boolean | ((params: ProxyTypeParams) => boolean);
         /**

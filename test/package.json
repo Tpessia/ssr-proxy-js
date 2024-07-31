@@ -6,11 +6,12 @@
     "build": "cd .. && npm run build",
     "start": "npm run build && nodemon --watch ./ --watch ../ index.js",
     "start:ts": "npm run build && ts-node-dev --project tsconfig.json index.ts",
+    "start:docker": "sudo docker compose -f ./docker/docker-compose.yml up --build",
     "start:bin": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js -c ./ssr-proxy-js.config.json",
     "start:npx": "npm_config_yes=true npx --yes ssr-proxy-js -c ./ssr-proxy-js.config.json",
     "test:axios": "node http-test.js",
     "test:curl-bot": "curl -fsSL -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' http://localhost:8080/ > output.html && xdg-open output.html",
-    "serve": "npx http-server ./public -p 3000 -a 0.0.0.0",
+    "serve": "npx http-server ./public -p 8080 -a 0.0.0.0",
     "docker": "sudo docker build -f Dockerfile -t ssr-proxy-js . && sudo docker run -it --rm -p 8080:8080 ssr-proxy-js"
   },
   "dependencies": {

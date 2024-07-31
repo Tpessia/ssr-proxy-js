@@ -1,5 +1,5 @@
 {
-    "port": 8080,
+    "httpPort": 8081,
     "hostname": "0.0.0.0",
     "targetRoute": "https://google.com",
     "proxyOrder": ["SsrProxy","HttpProxy"],
@@ -9,17 +9,12 @@
         "headless": true,
         "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
       },
-      "queryParams": [
-        {
-          "key": "headless",
-          "value": "true"
-        }
-      ],
       "allowedResources": ["document", "script", "xhr", "fetch"],
       "waitUntil": "networkidle0"
     },
     "httpProxy": {
-      "shouldUse": true
+      "shouldUse": true,
+      "unsafeHttps": true
     },
     "static": {
       "shouldUse": false
@@ -30,27 +25,10 @@
         "enabled": true
       },
       "file": {
-        "enabled": true,
-        "dirPath": "/tmp/ssr-proxy/logs"
+        "enabled": false
       }
     },
     "cache": {
-      "enabled": true,
-      "shouldUse": true,
-      "maxEntries": 50,
-      "maxByteSize": 52428800,
-      "expirationMs": 14400000,
-      "autoRefresh": {
-        "enabled": true,
-        "shouldUse": true,
-        "proxyOrder": ["SsrProxy","HttpProxy"],
-        "initTimeoutMs": 5000,
-        "intervalMs": 7200000,
-        "parallelism": 5,
-        "isBot": true,
-        "routes": [
-          { "method": "GET", "url": "https://google.com/" }
-        ]
-      }
+      "shouldUse": false
     }
   }

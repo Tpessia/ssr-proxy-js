@@ -365,7 +365,7 @@ interface SsrProxyConfig {
     cache?: {
         /**
          * Indicates if the caching should be used
-         * @default params => true
+         * @default params => params.proxyType === ProxyType.SsrProxy
          */
         shouldUse?: boolean | ((params: ProxyTypeParams) => boolean);
         /**
