@@ -552,7 +552,9 @@ export class SsrProxy {
 
     private fixResHeaders(headers: any) {
         // TODO: fix response headers
-        delete headers['content-encoding'];
+        // delete headers['content-encoding'];
+        // delete headers['transfer-encoding'];
+        Object.keys(headers).forEach(key => delete headers[key]);
     }
 
     // Cache
