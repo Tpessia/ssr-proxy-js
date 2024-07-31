@@ -391,6 +391,8 @@ export class SsrProxy {
 
             this.fixReqHeaders(headers);
 
+            logger.debug(`HttpProxy: Connecting - ${JSON.stringify(headers)}`);
+
             const response = await axios.request({
                 url: params.targetUrl.toString(),
                 method: method as any,
@@ -400,13 +402,13 @@ export class SsrProxy {
                 timeout: cHttpProxy.timeout,
             });
 
-            logger.debug(`HttpProxy result: ${response.statusText}`);
+            this.fixResHeaders(response.headers);
+
+            logger.debug(`HttpProxy: Connected - ${JSON.stringify(response.headers)}`);
 
             const contentType = this.getContentType(params.targetUrl.pathname);
 
             this.trySaveCacheStream(response.data, contentType, cacheKey, typeParams, logger);
-
-            this.fixResHeaders(response.headers);
 
             return { stream: response.data, headers: response.headers, contentType };
         } catch (err: any) {
@@ -503,6 +505,7 @@ export class SsrProxy {
                 if (interceptCount === 1) {
                     origHeaders = { ...(headers || {}), ...(origHeaders || {}) };
                     this.fixReqHeaders(origHeaders);
+                    logger.debug(`SSR: Intercepted - ${JSON.stringify(origHeaders)}`);
                 }
 
                 // Pass through all other requests
@@ -516,7 +519,7 @@ export class SsrProxy {
             const resHeaders = response?.headers();
             this.fixResHeaders(resHeaders);
 
-            logger.debug('SSR: Connected');
+            logger.debug(`SSR: Connected - ${JSON.stringify(resHeaders)}`);
 
             // Serialized text of page DOM
             const text = await page.content();
