@@ -19,7 +19,7 @@ const ssrProxy = new SsrProxy({
     customError: err => err.toString(),
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
-        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
+        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
         queryParams: [{ key: 'headless', value: 'true' }],
         allowedResources: ['document', 'script', 'xhr', 'fetch'],
         waitUntil: 'networkidle0',
@@ -49,7 +49,7 @@ const ssrProxy = new SsrProxy({
         shouldUse: params => params.proxyType === 'SsrProxy',
         maxEntries: 50,
         maxByteSize: 50 * 1024 * 1024, // 50MB
-        expirationMs: 24 * 60 * 60 * 1000, // 24h
+        expirationMs: 25 * 60 * 60 * 1000, // 25h
         autoRefresh: {
             enabled: true,
             shouldUse: () => true,
@@ -57,6 +57,7 @@ const ssrProxy = new SsrProxy({
             initTimeoutMs: 5 * 1000, // 5s
             intervalCron: '0 0 3 * * *', // every day at 3am
             intervalTz: 'Etc/UTC',
+            retries: 3,
             parallelism: 5,
             isBot: true,
             routes: [

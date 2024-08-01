@@ -22,6 +22,10 @@ export class Logger {
         Logger.error(errName, err, withStack, this.loggerIdStr);
     }
 
+    warn(errName: string, err: any, withStack: boolean) {
+        Logger.warn(errName, err, withStack, this.loggerIdStr);
+    }
+
     info(msg: string) {
         Logger.info(msg, this.loggerIdStr);
     }
@@ -35,6 +39,14 @@ export class Logger {
         if (this.logLevel >= 1) {
             if (this.enableConsole) console.log(`\x1b[31m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.error(logMsg);
+        }
+    }
+
+    static warn(errName: string, err: any, withStack: boolean, prefix: string = '') {
+        const logMsg = `${prefix}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
+        if (this.logLevel >= 2) {
+            if (this.enableConsole) console.log(`\x1b[33m${logMsg}\x1b[0m`);
+            if (this.fileLogger) this.fileLogger.warn(logMsg);
         }
     }
 

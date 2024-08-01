@@ -14,7 +14,7 @@ import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
 import { CacheItem, LogLevel, ProxyHeaders, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
-import { getOrCall, promiseParallel, streamToString } from './utils';
+import { getOrCall, promiseParallel, promiseRetry, streamToString } from './utils';
 
 export class SsrProxy {
     private config: SsrProxyConfig;
@@ -38,7 +38,7 @@ export class SsrProxy {
             isBot: (method, url, headers) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
-                browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
+                browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
                 queryParams: [{ key: 'headless', value: 'true' }],
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
@@ -70,7 +70,7 @@ export class SsrProxy {
                 shouldUse: params => params.proxyType === ProxyType.SsrProxy,
                 maxEntries: 50,
                 maxByteSize: 50 * 1000 * 1000, // 50MB
-                expirationMs: 24 * 60 * 60 * 1000, // 24h
+                expirationMs: 25 * 60 * 60 * 1000, // 25h
                 autoRefresh: {
                     enabled: false,
                     shouldUse: true,
@@ -78,6 +78,7 @@ export class SsrProxy {
                     initTimeoutMs: 5 * 1000, // 5s
                     intervalCron: '0 0 3 * * *', // every day at 3am
                     intervalTz: 'Etc/UTC',
+                    retries: 3,
                     parallelism: 5,
                     isBot: true,
                     routes: [{ method: 'GET', url: '/' }],
@@ -132,15 +133,19 @@ export class SsrProxy {
 
                 await promiseParallel(cAutoCache.routes!.map((route) => () => new Promise(async (res, rej) => {
                     try {
-                        const targetUrl = new URL(route.url, $this.config.targetRoute!);
-                        const params: ProxyParams = { isBot: cAutoCache.isBot!, cacheBypass: true, sourceUrl: route.url, targetUrl, method: route.method, headers: route.headers || {} };
-                        const { result, proxyType } = await $this.runProxy(params, logger);
+                        await promiseRetry(runProxy, cAutoCache.retries!, e => logger.warn('CacheRefresh Retry', e, false));
                         res('ok');
                     } catch (err) {
                         logger.error('CacheRefresh', err, false);
                         rej(err);
                     }
-                })), cAutoCache.parallelism!);
+
+                    async function runProxy() {
+                        const targetUrl = new URL(route.url, $this.config.targetRoute!);
+                        const params: ProxyParams = { isBot: cAutoCache.isBot!, cacheBypass: true, sourceUrl: route.url, targetUrl, method: route.method, headers: route.headers || {} };
+                        const { result, proxyType } = await $this.runProxy(params, logger);
+                    }
+                })), cAutoCache.parallelism!, true);
             } catch (err) {
                 logger.error('CacheRefresh', err, false);
             }

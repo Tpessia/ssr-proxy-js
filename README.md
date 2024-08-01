@@ -96,7 +96,7 @@ const ssrProxy = new SsrProxy({
     customError: err => err.toString(),
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
-        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
+        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
         queryParams: [{ key: 'headless', value: 'true' }],
         allowedResources: ['document', 'script', 'xhr', 'fetch'],
         waitUntil: 'networkidle0',
@@ -126,7 +126,7 @@ const ssrProxy = new SsrProxy({
         shouldUse: params => params.proxyType === 'SsrProxy',
         maxEntries: 50,
         maxByteSize: 50 * 1024 * 1024, // 50MB
-        expirationMs: 24 * 60 * 60 * 1000, // 24h
+        expirationMs: 25 * 60 * 60 * 1000, // 25h
         autoRefresh: {
             enabled: true,
             shouldUse: () => true,
@@ -134,6 +134,7 @@ const ssrProxy = new SsrProxy({
             initTimeoutMs: 5 * 1000, // 5s
             intervalCron: '0 0 3 * * *', // every day at 3am
             intervalTz: 'Etc/UTC',
+            retries: 3,
             parallelism: 5,
             isBot: true,
             routes: [
@@ -378,7 +379,7 @@ interface SsrProxyConfig {
         maxByteSize?: number;
         /**
          * Defines the expiration time for each cached page
-         * @default 24 * 60 * 60 * 1000 // 24h
+         * @default 25 * 60 * 60 * 1000 // 25h
          */
         expirationMs?: number;
         /**
@@ -417,6 +418,11 @@ interface SsrProxyConfig {
              * @default 'Etc/UTC'
              */
             intervalTz?: string;
+            /**
+             * Number of retries if fails
+             * @default 3
+             */
+            retries?: number;
             /**
              * Maximum number of parallel refreshes
              * @default 5 * 60 * 1000 // 5 minutes

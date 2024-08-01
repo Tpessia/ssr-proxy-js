@@ -1,5 +1,10 @@
 import { Stream } from 'stream';
 
+export function getOrCall<T>(obj: T | ((...args: any[]) => T), ...args: any[]): T;
+export function getOrCall<T>(obj?: T | ((...args: any[]) => T), ...args: any[]): T | undefined {
+    return typeof obj === 'function' ? (obj as (...args: any[]) => T)?.(...args) : obj;
+}
+
 export function streamToString(stream: Stream): Promise<string> {
     const chunks: Buffer[] = [];
     return new Promise((res, rej) => {
@@ -10,23 +15,24 @@ export function streamToString(stream: Stream): Promise<string> {
     });
 }
 
-export function promiseParallel<T, TRej = Error>(tasks: (() => Promise<T>)[], concurrencyLimit: number): Promise<(T | TRej)[]> {
+export function promiseParallel<T, TRej = T>(tasks: (() => Promise<T>)[], concurrencyLimit: number, noReject: boolean = false): Promise<(T | TRej)[]> {
     return new Promise<(T | TRej)[]>((res, rej) => {
         if (tasks.length === 0) res([]);
 
         const results: (T | TRej)[] = [];
-        const pool: Promise<T>[] = [];
+        const pool: Promise<T | TRej>[] = [];
         let canceled: boolean = false;
 
         tasks.slice(0, concurrencyLimit).map(e => runPromise(e));
 
-        function runPromise(task: () => Promise<T>): Promise<T> {
-            const promise = task();
+        function runPromise(task: () => Promise<T>): Promise<T | TRej> {
+            let promise: Promise<T | TRej> = task();
 
             pool.push(promise);
 
-            promise.catch((e: TRej) => e)
-            .then(r => {
+            if (noReject) promise = promise.catch((e: TRej) => e);
+
+            promise.then(r => {
                 if (canceled) return;
 
                 results.push(r);
@@ -43,14 +49,23 @@ export function promiseParallel<T, TRej = Error>(tasks: (() => Promise<T>)[], co
                 if (!nextTask) return;
 
                 runPromise(nextTask);
-            });
+            })
+            
+            if (!noReject) promise.catch(err => { canceled = true; rej(err); });
 
             return promise;
         }
     });
 }
 
-export function getOrCall<T>(obj: T | ((...args: any[]) => T), ...args: any[]): T;
-export function getOrCall<T>(obj?: T | ((...args: any[]) => T), ...args: any[]): T | undefined {
-    return typeof obj === 'function' ? (obj as (...args: any[]) => T)?.(...args) : obj;
+export async function promiseRetry<T>(func: () => Promise<T>, maxRetries: number, onError?: (err: any) => void): Promise<T> {
+    try {
+        return await func();
+    } catch (err) {
+        onError?.(err);
+        const funcAny = (func as any);
+        funcAny._retries = (funcAny._retries as number ?? 0) + 1;
+        if (funcAny._retries >= maxRetries) throw err;
+        else return await promiseRetry(func, maxRetries, onError);
+    }
 }

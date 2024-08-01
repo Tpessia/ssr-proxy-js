@@ -132,7 +132,7 @@ export interface SsrProxyConfig {
         /**
          * Browser configuration used by Puppeteer
          * @default
-         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] }
+         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 }
          */
         browserConfig?: SsrBrowerConfig;
         /**
@@ -277,7 +277,7 @@ export interface SsrProxyConfig {
         maxByteSize?: number;
         /**
          * Defines the expiration time for each cached page
-         * @default 24 * 60 * 60 * 1000 // 24h
+         * @default 25 * 60 * 60 * 1000 // 25h
          */
         expirationMs?: number;
         /**
@@ -316,6 +316,11 @@ export interface SsrProxyConfig {
              * @default 'Etc/UTC'
              */
             intervalTz?: string;
+            /**
+             * Number of retries if fails
+             * @default 3
+             */
+            retries?: number;
             /**
              * Maximum number of parallel refreshes
              * @default 5 * 60 * 1000 // 5 minutes
