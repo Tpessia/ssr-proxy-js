@@ -34,6 +34,10 @@ export class ProxyCache {
         return this.cache.set(urlStr, { text, contentType, hits: 0, date: new Date() });
     }
 
+    delete(urlStr: string) {
+        return this.cache.delete(urlStr);
+    }
+
     async pipe(urlStr: string, stream: Stream, contentType: string) {
         return await streamToString(stream).then(str => this.cache.set(urlStr, { text: str, contentType, hits: 0, date: new Date() }));
     }
@@ -68,7 +72,7 @@ export class ProxyCache {
         return deleted;
 
         function deleteEntry(key: string, reason: string) {
-            if ($this.cache.delete(key)) deleted.push({ key, reason });
+            if ($this.delete(key)) deleted.push({ key, reason });
         }
     }
 }

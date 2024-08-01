@@ -39,11 +39,12 @@
         "shouldUse": true,
         "proxyOrder": ["SsrProxy","HttpProxy"],
         "initTimeoutMs": 5000,
-        "intervalMs": 7200000,
+        "intervalCron": "0 0 3 * * *",
+        "intervalTz": "Etc/UTC",
         "parallelism": 5,
         "isBot": true,
         "routes": [
-          { "method": "GET", "url": "http://web-server:8080/" }
+          { "method": "GET", "url": "/" }
         ]
       }
     }

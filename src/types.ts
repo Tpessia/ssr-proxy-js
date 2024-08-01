@@ -12,7 +12,7 @@ export enum ProxyType {
 export interface SsrRenderResult {
     text?: string;
     error?: string;
-    headers?: any;
+    headers?: ProxyHeaders;
     ttRenderMs: number;
 }
 
@@ -21,13 +21,18 @@ export interface ProxyResult {
     stream?: Stream;
     contentType?: string;
     error?: any;
-    headers?: any;
+    headers?: ProxyHeaders;
 }
 
+export type ProxyHeaders = Record<string, string>;
+
 export interface ProxyParams {
-    isBot: boolean;
     sourceUrl: string;
+    method: string;
+    headers: ProxyHeaders;
     targetUrl: URL;
+    isBot: boolean;
+    cacheBypass: boolean;
     lastError?: any;
 }
 
@@ -89,13 +94,14 @@ export interface SsrProxyConfig {
      */
     proxyOrder?: ProxyType[];
     /**
-     * Function for processing the proxy result before serving
-     * @default undefined
+     * Custom implementation to define whether the client is a bot (e.g. Googlebot)
+     * 
+     * @default Defaults to 'https://www.npmjs.com/package/isbot'
      */
-    processor?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
+    isBot?: boolean | ((method: string, url: string, headers: ProxyHeaders) => boolean);
     /**
      * Which HTTP response status code to return in case of an error
-     * @default params => 404
+     * @default 404
      */
     failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
@@ -105,28 +111,28 @@ export interface SsrProxyConfig {
      */
     customError?: string | ((err: any) => string);
     /**
-     * Custom implementation to define whether the client is a bot (e.g. Googlebot)
-     * 
-     * Defaults to https://www.npmjs.com/package/isbot
+     * Function for processing the original request before proxying
+     * @default undefined
      */
-    isBot?: boolean | ((method: string, url: string, headers: any) => boolean);
+    reqMiddleware?: (params: ProxyParams) => Promise<ProxyParams>;
+    /**
+     * Function for processing the proxy result before serving
+     * @default undefined
+     */
+    resMiddleware?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
     /**
      * Server-Side Rendering configuration
      */
     ssr?: {
         /**
          * Indicates if the SSR Proxy should be used
-         * @default params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl))
+         * @default params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname))
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Browser configuration used by Puppeteer
          * @default
-         * 
-         * {
-         *     headless: true,
-         *     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-         * }
+         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] }
          */
         browserConfig?: SsrBrowerConfig;
         /**
@@ -161,7 +167,7 @@ export interface SsrProxyConfig {
     httpProxy?: {
         /**
          * Indicates if the HTTP Proxy should be used
-         * @default params => true
+         * @default true
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -177,7 +183,7 @@ export interface SsrProxyConfig {
         }[];
         /**
          * Ignore https errors via rejectUnauthorized=false
-         * @default params => false
+         * @default false
          */
         unsafeHttps?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -192,7 +198,7 @@ export interface SsrProxyConfig {
     static?: {
         /**
          * Indicates if the Static File Serving should be used
-         * @default params => true
+         * @default false
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -271,7 +277,7 @@ export interface SsrProxyConfig {
         maxByteSize?: number;
         /**
          * Defines the expiration time for each cached page
-         * @default 50 * 1000 * 1000 // 50MB
+         * @default 24 * 60 * 60 * 1000 // 24h
          */
         expirationMs?: number;
         /**
@@ -287,7 +293,7 @@ export interface SsrProxyConfig {
             enabled?: boolean;
             /**
              * Indicates if the auto refresh should be used
-             * @default params => true
+             * @default true
              */
             shouldUse?: boolean | (() => boolean);
             /**
@@ -297,14 +303,19 @@ export interface SsrProxyConfig {
             proxyOrder?: ProxyType[];
             /**
              * Delay before first refresh
-             * @default 5 * 1000 // 5 seconds
+             * @default 5 * 1000 // 5s
              */
             initTimeoutMs?: number;
             /**
-             * Interval between refreshes
-             * @default 5 * 60 * 1000 // 5 minutes
+             * Cron expression for interval between refreshes
+             * @default '0 0 3 * * *' // every day at 3am
              */
-            intervalMs?: number;
+            intervalCron?: string;
+            /**
+             * Tz for intervalCron
+             * @default 'Etc/UTC'
+             */
+            intervalTz?: string;
             /**
              * Maximum number of parallel refreshes
              * @default 5 * 60 * 1000 // 5 minutes
@@ -317,7 +328,8 @@ export interface SsrProxyConfig {
             isBot?: boolean;
             /**
              * Routes to auto refresh
-             * @default []
+             * @default
+             * [{ method: 'GET', url: '/' }]
              */
             routes?: {
                 /**
@@ -327,14 +339,14 @@ export interface SsrProxyConfig {
                 method: string;
                 /**
                  * Route URL
-                 * @example 'http://localhost:80/example/
+                 * @example '/example/'
                  */
                 url: string;
                 /**
                  * Route Headers
                  * @example { 'X-Example': 'Test' }
                  */
-                headers?: any;
+                headers?: ProxyHeaders;
             }[];
         };
     };

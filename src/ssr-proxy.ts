@@ -1,40 +1,19 @@
-// Node.js modules
-// https://zellwk.com/blog/publish-to-npm/
-// https://www.sensedeep.com/blog/posts/2021/how-to-create-single-source-npm-module.html
-// https://electerious.medium.com/from-commonjs-to-es-modules-how-to-modernize-your-node-js-app-ad8cdd4fb662
-
-// Puppeteer SSR
-// https://developers.google.com/web/tools/puppeteer/articles/ssr
-
-// Bot User Agent
-// https://www.keycdn.com/blog/web-crawlers
-// https://github.com/omrilotan/isbot/blob/main/src/list.json
-// https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
-
-// Nginx Redirect by User Agent
-// https://serverfault.com/questions/775463/nginx-redirect-based-on-user-agent
-// https://serverfault.com/questions/865055/nginx-redirect-if-user-agent-contains-xyz
-
-// Other Proxies
-// https://github.com/xiamx/ssr-proxy // https://www.npmjs.com/package/ssr-proxy
-// https://cnpmjs.org/package/spa-ssr-proxy // https://www.npmjs.com/package/spa-ssr-proxy
-// https://github.com/jamiekyle-eb/ssr-proxy
-// https://github.com/postor/ssr-proxy-puppeteer // https://www.npmjs.com/package/ssr-proxy-puppeteer
-
 import axios from 'axios';
+import cloneDeep from 'clone-deep';
 import deepmerge from 'deepmerge';
 import express from 'express';
 import fs from 'fs';
 import https from 'https';
-import isbot from 'isbot';
+import { isbot } from 'isbot';
 import mime from 'mime-types';
+import { scheduleJob } from 'node-schedule';
 import os from 'os';
 import path from 'path';
 import puppeteer from 'puppeteer';
 import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
-import { CacheItem, LogLevel, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
+import { CacheItem, LogLevel, ProxyHeaders, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
 import { getOrCall, promiseParallel, streamToString } from './utils';
 
 export class SsrProxy {
@@ -52,31 +31,27 @@ export class SsrProxy {
             hostname: '0.0.0.0',
             targetRoute: 'http://localhost:80',
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
-            failStatus: params => 404,
+            reqMiddleware: undefined,
+            resMiddleware: undefined,
+            failStatus: 404,
             customError: undefined,
-            isBot: (method: string, url: string, headers: any) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
+            isBot: (method, url, headers) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
-                browserConfig: {
-                    headless: true,
-                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-                },
-                queryParams: [{
-                    key: 'headless',
-                    value: 'true',
-                }],
+                browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
+                queryParams: [{ key: 'headless', value: 'true' }],
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
                 timeout: 60000,
             },
             httpProxy: {
-                shouldUse: params => true,
+                shouldUse: true,
                 queryParams: [],
                 unsafeHttps: false,
                 timeout: 60000,
             },
             static: {
-                shouldUse: params => true,
+                shouldUse: false,
                 dirPath: path.join(process.cwd(), 'public'),
                 useIndexFile: path => path.endsWith('/'),
                 indexFile: 'index.html',
@@ -95,16 +70,17 @@ export class SsrProxy {
                 shouldUse: params => params.proxyType === ProxyType.SsrProxy,
                 maxEntries: 50,
                 maxByteSize: 50 * 1000 * 1000, // 50MB
-                expirationMs: 10 * 60 * 1000, // 10 minutes
+                expirationMs: 24 * 60 * 60 * 1000, // 24h
                 autoRefresh: {
                     enabled: false,
-                    shouldUse: () => true,
+                    shouldUse: true,
                     proxyOrder: [ProxyType.SsrProxy],
-                    initTimeoutMs: 5 * 1000, // 5 seconds
-                    intervalMs: 5 * 60 * 1000, // 5 minutes
+                    initTimeoutMs: 5 * 1000, // 5s
+                    intervalCron: '0 0 3 * * *', // every day at 3am
+                    intervalTz: 'Etc/UTC',
                     parallelism: 5,
                     isBot: true,
-                    routes: [],
+                    routes: [{ method: 'GET', url: '/' }],
                 },
             },
         };
@@ -139,24 +115,26 @@ export class SsrProxy {
         const enabled = cAutoCache.enabled! && cAutoCache.routes! && cAutoCache.routes!.length!;
         if (!enabled) return;
 
-        setTimeout(() => {
-            runRefresh();
-            const interval = setInterval(runRefresh, cCache.autoRefresh!.intervalMs!);
-        }, cCache.autoRefresh!.initTimeoutMs!);
+        if (cAutoCache.initTimeoutMs)
+            setTimeout(runRefresh, cAutoCache.initTimeoutMs);
+
+        if (cAutoCache.intervalCron)
+            scheduleJob({ rule: cAutoCache.intervalCron, tz: cAutoCache.intervalTz }, runRefresh);
 
         async function runRefresh() {
             const logger = new Logger(true);
 
             try {
                 if (!cAutoCache.shouldUse || !getOrCall(cAutoCache.shouldUse) || !cAutoCache.routes?.length) return;
-    
+
                 const routesStr = '> ' + cAutoCache.routes!.map(e => e.url).join('\n> ');
                 logger.info(`Refreshing Cache:\n${routesStr}`);
-    
+
                 await promiseParallel(cAutoCache.routes!.map((route) => () => new Promise(async (res, rej) => {
                     try {
-                        const params: ProxyParams = { isBot: cAutoCache.isBot!, sourceUrl: route.url, targetUrl: new URL(route.url) };
-                        const { result, proxyType } = await $this.runProxy(params, logger, route.method, route.headers);
+                        const targetUrl = new URL(route.url, $this.config.targetRoute!);
+                        const params: ProxyParams = { isBot: cAutoCache.isBot!, cacheBypass: true, sourceUrl: route.url, targetUrl, method: route.method, headers: route.headers || {} };
+                        const { result, proxyType } = await $this.runProxy(params, logger);
                         res('ok');
                     } catch (err) {
                         logger.error('CacheRefresh', err, false);
@@ -181,12 +159,14 @@ export class SsrProxy {
             try {
                 const sourceUrl = req.originalUrl;
                 const targetUrl = new URL(req.originalUrl, this.config.targetRoute);
+                const method = req.method;
+                const headers = this.fixHeaders(req.headers);
 
-                const isBot = getOrCall(this.config.isBot, req.method, sourceUrl, req.headers)!;
+                const isBot = getOrCall(this.config.isBot, method, sourceUrl, headers)!;
 
-                const params: ProxyParams = { isBot, sourceUrl, targetUrl };
+                const params: ProxyParams = { isBot, cacheBypass: false, method, sourceUrl, headers, targetUrl };
 
-                const { result, proxyType } = await this.runProxy(params, logger, req.method, req.headers);
+                const { result, proxyType } = await this.runProxy(params, logger);
 
                 const proxyTypeParams: ProxyTypeParams = { ...params, proxyType };
 
@@ -225,7 +205,7 @@ export class SsrProxy {
                 return res.send(errMsg);
             }
 
-            function setHeaders(headers: any) {
+            function setHeaders(headers: ProxyHeaders) {
                 for (let key in headers) {
                     try {
                         res.set(key, headers[key]);
@@ -275,9 +255,9 @@ export class SsrProxy {
         return app;
     }
 
-    private async runProxy(params: ProxyParams, logger: Logger, method?: string, headers?: any) {
-        headers = headers || {};
-        method = method || 'GET';
+    private async runProxy(params: ProxyParams, logger: Logger) {
+        params.headers ||= {};
+        params.method ||= 'GET';
 
         let result: ProxyResult = {};
         let proxyType: ProxyType = this.config.proxyOrder![0];
@@ -285,13 +265,15 @@ export class SsrProxy {
         for (let i in this.config.proxyOrder!) {
             proxyType = this.config.proxyOrder![i];
 
+            const proxyParams = cloneDeep(this.config.reqMiddleware != null ? await this.config.reqMiddleware(params) : params);
+
             try {
                 if (proxyType === ProxyType.SsrProxy) {
-                    result = await this.runSsrProxy(params, logger, headers);
+                    result = await this.runSsrProxy(proxyParams, logger);
                 } else if (proxyType === ProxyType.HttpProxy) {
-                    result = await this.runHttpProxy(params, logger, method, headers);
+                    result = await this.runHttpProxy(proxyParams, logger);
                 } else if (proxyType === ProxyType.StaticProxy) {
-                    result = await this.runStaticProxy(params, logger);
+                    result = await this.runStaticProxy(proxyParams, logger);
                 } else {
                     throw new Error('Invalid Proxy Type');
                 }
@@ -303,12 +285,12 @@ export class SsrProxy {
             if (result.error == null) break;
         }
 
-        if (this.config.processor != null) result = await this.config.processor(params, result);
+        if (this.config.resMiddleware != null) result = await this.config.resMiddleware(params, result);
 
         return { result, proxyType };
     }
 
-    private async runSsrProxy(params: ProxyParams, logger: Logger, headers: any): Promise<ProxyResult> {
+    private async runSsrProxy(params: ProxyParams, logger: Logger): Promise<ProxyResult> {
         const cSsr = this.config.ssr!;
         const cacheKey = `${ProxyType.SsrProxy}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.SsrProxy };
@@ -323,11 +305,11 @@ export class SsrProxy {
         try {
             logger.debug(`Using SsrProxy: ${params.targetUrl}`);
 
-            logger.info(`Bot Access | URL: ${params.sourceUrl} | User Agent: ${headers['user-agent']}`);
+            logger.info(`Bot Access | URL: ${params.sourceUrl} | User Agent: ${params.headers['user-agent']}`);
 
             // Try use Cache
 
-            const cache = this.tryGetCache(cacheKey, typeParams, logger);
+            const cache = !params.cacheBypass && this.tryGetCache(cacheKey, typeParams, logger);
             if (cache) {
                 logger.info(`SSR Cache Hit`);
                 return { text: cache.text, contentType: cache.contentType };
@@ -335,7 +317,7 @@ export class SsrProxy {
 
             // Try use SsrProxy
 
-            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), logger, headers);
+            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), logger, params.headers);
 
             const isSuccess = error == null;
 
@@ -360,9 +342,9 @@ export class SsrProxy {
         }
     }
 
-    private async runHttpProxy(params: ProxyParams, logger: Logger, method: string, headers: any): Promise<ProxyResult> {
+    private async runHttpProxy(params: ProxyParams, logger: Logger): Promise<ProxyResult> {
         const cHttpProxy = this.config.httpProxy!;
-        const cacheKey = `${ProxyType.HttpProxy}:${method}:${params.targetUrl}`;
+        const cacheKey = `${ProxyType.HttpProxy}:${params.method}:${params.targetUrl}`;
         const typeParams = { ...params, proxyType: ProxyType.HttpProxy };
 
         const shouldUse = getOrCall(cHttpProxy.shouldUse, params)!;
@@ -377,7 +359,7 @@ export class SsrProxy {
 
             // Try use Cache
 
-            const cache = this.tryGetCache(cacheKey, typeParams, logger);
+            const cache = !params.cacheBypass && this.tryGetCache(cacheKey, typeParams, logger);
             if (cache) {
                 logger.info(`HTTP Cache Hit`);
                 return { text: cache.text, contentType: cache.contentType };
@@ -389,28 +371,28 @@ export class SsrProxy {
             for (let param of cHttpProxy.queryParams!)
                 params.targetUrl.searchParams.set(param.key, param.value);
 
-            this.fixReqHeaders(headers);
+            const reqHeaders = this.fixReqHeaders(params.headers);
 
-            logger.debug(`HttpProxy: Connecting - ${JSON.stringify(headers)}`);
+            logger.debug(`HttpProxy: Connecting - ${JSON.stringify(reqHeaders)}`);
 
             const response = await axios.request({
                 url: params.targetUrl.toString(),
-                method: method as any,
+                method: params.method as any,
                 responseType: 'stream',
-                headers: headers as any,
+                headers: reqHeaders,
                 httpsAgent: new https.Agent({ rejectUnauthorized: getOrCall(cHttpProxy.unsafeHttps, params) }),
                 timeout: cHttpProxy.timeout,
             });
 
-            this.fixResHeaders(response.headers);
+            const resHeaders = this.fixResHeaders(response.headers);
 
-            logger.debug(`HttpProxy: Connected - ${JSON.stringify(response.headers)}`);
+            logger.debug(`HttpProxy: Connected - ${JSON.stringify(resHeaders)}`);
 
             const contentType = this.getContentType(params.targetUrl.pathname);
 
             this.trySaveCacheStream(response.data, contentType, cacheKey, typeParams, logger);
 
-            return { stream: response.data, headers: response.headers, contentType };
+            return { stream: response.data, headers: resHeaders, contentType };
         } catch (err: any) {
             const error = err?.response?.data ? await streamToString(err.response.data).catch(err => err) : err;
             logger.error('HttpProxyError', error, false);
@@ -435,7 +417,7 @@ export class SsrProxy {
 
             // Try use Cache
 
-            const cache = this.tryGetCache(cacheKey, typeParams, logger);
+            const cache = !params.cacheBypass && this.tryGetCache(cacheKey, typeParams, logger);
             if (cache) {
                 logger.info(`Static Cache Hit`);
                 return { text: cache.text, contentType: cache.contentType };
@@ -466,7 +448,7 @@ export class SsrProxy {
         }
     }
 
-    private async tryRender(urlStr: string, logger: Logger, headers: any): Promise<SsrRenderResult> {
+    private async tryRender(urlStr: string, logger: Logger, headers: ProxyHeaders): Promise<SsrRenderResult> {
         const cSsr = this.config.ssr!;
         const start = Date.now();
 
@@ -503,8 +485,7 @@ export class SsrProxy {
                 // Custom headers
                 let origHeaders = req.headers();
                 if (interceptCount === 1) {
-                    origHeaders = { ...(headers || {}), ...(origHeaders || {}) };
-                    this.fixReqHeaders(origHeaders);
+                    origHeaders = this.fixReqHeaders({ ...(headers || {}), ...(origHeaders || {}) });
                     logger.debug(`SSR: Intercepted - ${JSON.stringify(origHeaders)}`);
                 }
 
@@ -516,8 +497,8 @@ export class SsrProxy {
             const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil, timeout: cSsr.timeout });
             // await page.waitForNetworkIdle({ idleTime: 1000, timeout: cSsr.timeout });
 
-            const resHeaders = response?.headers();
-            this.fixResHeaders(resHeaders);
+            const ssrHeaders = response?.headers();
+            const resHeaders = this.fixResHeaders(ssrHeaders);
 
             logger.debug(`SSR: Connected - ${JSON.stringify(resHeaders)}`);
 
@@ -545,16 +526,23 @@ export class SsrProxy {
     }
 
     private fixReqHeaders(headers: any) {
-        delete headers['host'];
-        delete headers['referer'];
-        delete headers['user-agent'];
+        const proxyHeaders = this.fixHeaders(headers);
+        delete proxyHeaders['host'];
+        delete proxyHeaders['referer'];
+        delete proxyHeaders['user-agent'];
+        return proxyHeaders;
     }
 
     private fixResHeaders(headers: any) {
+        const proxyHeaders = this.fixHeaders({});
         // TODO: fix response headers
-        // delete headers['content-encoding'];
-        // delete headers['transfer-encoding'];
-        Object.keys(headers).forEach(key => delete headers[key]);
+        // delete proxyHeaders['content-encoding'];
+        // delete proxyHeaders['transfer-encoding'];
+        return proxyHeaders;
+    }
+
+    private fixHeaders(headers: object) {
+        return Object.entries(headers).reduce((acc, [key, value]) => (value != null ? { ...acc, [key.toLowerCase()]: value?.toString() } : acc), {} as ProxyHeaders);
     }
 
     // Cache

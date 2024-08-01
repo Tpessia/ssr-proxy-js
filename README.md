@@ -67,7 +67,7 @@ npx ssr-proxy-js --httpPort=8080 --targetRoute=http://localhost:3000 --static.di
 // ./ssr-proxy-js.config.json
 
 {
-    "port": 8080,
+    "httpPort": 8080,
     "targetRoute": "http://localhost:3000"
 }
 ```
@@ -77,37 +77,34 @@ npx ssr-proxy-js --httpPort=8080 --targetRoute=http://localhost:3000 --static.di
 ```javascript
 const os = require('os');
 const path = require('path');
-const { SsrProxy } = require('ssr-proxy-js');
+const { SsrProxy } = require('ssr-proxy-js-local');
 
-const BASE_PROXY_ROUTE = 'http://localhost:3000';
+const BASE_PROXY_PORT = '8080';
+const BASE_PROXY_ROUTE = `http://localhost:${BASE_PROXY_PORT}`;
 const STATIC_FILES_PATH = path.join(process.cwd(), 'public');
 const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`\nLogging at: ${LOGGING_PATH}`);
 
 const ssrProxy = new SsrProxy({
-    httpPort: 8080,
+    httpPort: 8081,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
     proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
+    isBot: (method, url, headers) => true,
     failStatus: params => 404,
-    // customError: err => err.toString(),
-    // isBot: (method, url, headers) => true,
+    customError: err => err.toString(),
     ssr: {
-        shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl)),
-        browserConfig: {
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        },
-        queryParams: [{
-            key: 'headless',
-            value: 'true',
-        }],
+        shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
+        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
+        queryParams: [{ key: 'headless', value: 'true' }],
         allowedResources: ['document', 'script', 'xhr', 'fetch'],
         waitUntil: 'networkidle0',
+        timeout: 60000,
     },
     httpProxy: {
         shouldUse: params => true,
+        timeout: 60000,
     },
     static: {
         shouldUse: params => true,
@@ -126,22 +123,22 @@ const ssrProxy = new SsrProxy({
         },
     },
     cache: {
-        enabled: true,
         shouldUse: params => params.proxyType === 'SsrProxy',
         maxEntries: 50,
         maxByteSize: 50 * 1024 * 1024, // 50MB
-        expirationMs: 10 * 60 * 1000, // 10 minutes
+        expirationMs: 24 * 60 * 60 * 1000, // 24h
         autoRefresh: {
             enabled: true,
             shouldUse: () => true,
             proxyOrder: ['SsrProxy'],
-            initTimeoutMs: 5 * 1000, // 5 seconds
-            intervalMs: 5 * 60 * 1000, // 5 minutes
+            initTimeoutMs: 5 * 1000, // 5s
+            intervalCron: '0 0 3 * * *', // every day at 3am
+            intervalTz: 'Etc/UTC',
             parallelism: 5,
             isBot: true,
             routes: [
-                { method: 'GET', url: `${BASE_PROXY_ROUTE}/` },
-                { method: 'GET', url: `${BASE_PROXY_ROUTE}/login` },
+                { method: 'GET', url: '/' },
+                { method: 'GET', url: '/login' },
             ],
         },
     },
@@ -198,13 +195,14 @@ interface SsrProxyConfig {
      */
     proxyOrder?: ProxyType[];
     /**
-     * Function for processing the proxy result before serving
-     * @default undefined
+     * Custom implementation to define whether the client is a bot (e.g. Googlebot)
+     * 
+     * @default Defaults to 'https://www.npmjs.com/package/isbot'
      */
-    processor?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
+    isBot?: boolean | ((method: string, url: string, headers: ProxyHeaders) => boolean);
     /**
      * Which HTTP response status code to return in case of an error
-     * @default params => 404
+     * @default 404
      */
     failStatus?: number | ((params: ProxyTypeParams) => number);
     /**
@@ -214,28 +212,28 @@ interface SsrProxyConfig {
      */
     customError?: string | ((err: any) => string);
     /**
-     * Custom implementation to define whether the client is a bot (e.g. Googlebot)
-     * 
-     * Defaults to https://www.npmjs.com/package/isbot
+     * Function for processing the original request before proxying
+     * @default undefined
      */
-    isBot?: boolean | ((method: string, url: string, headers: any) => boolean);
+    reqMiddleware?: (params: ProxyParams) => Promise<ProxyParams>;
+    /**
+     * Function for processing the proxy result before serving
+     * @default undefined
+     */
+    resMiddleware?: (params: ProxyParams, result: ProxyResult) => Promise<ProxyResult>;
     /**
      * Server-Side Rendering configuration
      */
     ssr?: {
         /**
          * Indicates if the SSR Proxy should be used
-         * @default params => params.isBot && (/\.html$/.test(params.targetUrl) || !/\./.test(params.targetUrl))
+         * @default params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname))
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Browser configuration used by Puppeteer
          * @default
-         * 
-         * {
-         *     headless: true,
-         *     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-         * }
+         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] }
          */
         browserConfig?: SsrBrowerConfig;
         /**
@@ -270,7 +268,7 @@ interface SsrProxyConfig {
     httpProxy?: {
         /**
          * Indicates if the HTTP Proxy should be used
-         * @default params => true
+         * @default true
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -286,7 +284,7 @@ interface SsrProxyConfig {
         }[];
         /**
          * Ignore https errors via rejectUnauthorized=false
-         * @default params => false
+         * @default false
          */
         unsafeHttps?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -301,7 +299,7 @@ interface SsrProxyConfig {
     static?: {
         /**
          * Indicates if the Static File Serving should be used
-         * @default params => true
+         * @default false
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
@@ -380,7 +378,7 @@ interface SsrProxyConfig {
         maxByteSize?: number;
         /**
          * Defines the expiration time for each cached page
-         * @default 50 * 1000 * 1000 // 50MB
+         * @default 24 * 60 * 60 * 1000 // 24h
          */
         expirationMs?: number;
         /**
@@ -396,7 +394,7 @@ interface SsrProxyConfig {
             enabled?: boolean;
             /**
              * Indicates if the auto refresh should be used
-             * @default params => true
+             * @default true
              */
             shouldUse?: boolean | (() => boolean);
             /**
@@ -406,14 +404,19 @@ interface SsrProxyConfig {
             proxyOrder?: ProxyType[];
             /**
              * Delay before first refresh
-             * @default 5 * 1000 // 5 seconds
+             * @default 5 * 1000 // 5s
              */
             initTimeoutMs?: number;
             /**
-             * Interval between refreshes
-             * @default 5 * 60 * 1000 // 5 minutes
+             * Cron expression for interval between refreshes
+             * @default '0 0 3 * * *' // every day at 3am
              */
-            intervalMs?: number;
+            intervalCron?: string;
+            /**
+             * Tz for intervalCron
+             * @default 'Etc/UTC'
+             */
+            intervalTz?: string;
             /**
              * Maximum number of parallel refreshes
              * @default 5 * 60 * 1000 // 5 minutes
@@ -426,7 +429,8 @@ interface SsrProxyConfig {
             isBot?: boolean;
             /**
              * Routes to auto refresh
-             * @default []
+             * @default
+             * [{ method: 'GET', url: '/' }]
              */
             routes?: {
                 /**
@@ -436,14 +440,14 @@ interface SsrProxyConfig {
                 method: string;
                 /**
                  * Route URL
-                 * @example 'http://localhost:80/example/
+                 * @example '/example/'
                  */
                 url: string;
                 /**
                  * Route Headers
                  * @example { 'X-Example': 'Test' }
                  */
-                headers?: any;
+                headers?: ProxyHeaders;
             }[];
         };
     };
@@ -454,3 +458,26 @@ interface SsrProxyConfig {
 
 1. Commit new code
 2. npm run publish:np
+
+<!-- Node.js modules
+https://zellwk.com/blog/publish-to-npm/
+https://www.sensedeep.com/blog/posts/2021/how-to-create-single-source-npm-module.html
+https://electerious.medium.com/from-commonjs-to-es-modules-how-to-modernize-your-node-js-app-ad8cdd4fb662
+
+Puppeteer SSR
+https://developers.google.com/web/tools/puppeteer/articles/ssr
+
+Bot User Agent
+https://www.keycdn.com/blog/web-crawlers
+https://github.com/omrilotan/isbot/blob/main/src/list.json
+https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
+
+Nginx Redirect by User Agent
+https://serverfault.com/questions/775463/nginx-redirect-based-on-user-agent
+https://serverfault.com/questions/865055/nginx-redirect-if-user-agent-contains-xyz
+
+Other Proxies
+https://github.com/xiamx/ssr-proxy / https://www.npmjs.com/package/ssr-proxy
+https://cnpmjs.org/package/spa-ssr-proxy / https://www.npmjs.com/package/spa-ssr-proxy
+https://github.com/jamiekyle-eb/ssr-proxy
+https://github.com/postor/ssr-proxy-puppeteer / https://www.npmjs.com/package/ssr-proxy-puppeteer -->
