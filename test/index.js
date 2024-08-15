@@ -13,10 +13,11 @@ const ssrProxy = new SsrProxy({
     httpPort: 8081,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
-    proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
+    proxyOrder: ['SsrProxy', 'HttpProxy', 'StaticProxy'],
     isBot: (method, url, headers) => true,
     failStatus: params => 404,
     customError: err => err.toString(),
+    skipOnError: false,
     ssr: {
         shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
         browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
@@ -53,12 +54,13 @@ const ssrProxy = new SsrProxy({
         autoRefresh: {
             enabled: true,
             shouldUse: () => true,
-            proxyOrder: ['SsrProxy'],
+            proxyOrder: ['SsrProxy', 'HttpProxy'],
             initTimeoutMs: 5 * 1000, // 5s
             intervalCron: '0 0 3 * * *', // every day at 3am
             intervalTz: 'Etc/UTC',
             retries: 3,
             parallelism: 5,
+            closeBrowser: true,
             isBot: true,
             routes: [
                 { method: 'GET', url: '/' },

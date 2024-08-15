@@ -35,7 +35,7 @@ export class Logger {
     }
 
     static error(errName: string, err: any, withStack: boolean, prefix: string = '') {
-        const logMsg = `${prefix}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
+        const logMsg = `${prefix}${this.logPrefix()}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
         if (this.logLevel >= 1) {
             if (this.enableConsole) console.log(`\x1b[31m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.error(logMsg);
@@ -43,7 +43,7 @@ export class Logger {
     }
 
     static warn(errName: string, err: any, withStack: boolean, prefix: string = '') {
-        const logMsg = `${prefix}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
+        const logMsg = `${prefix}${this.logPrefix()}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
         if (this.logLevel >= 2) {
             if (this.enableConsole) console.log(`\x1b[33m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.warn(logMsg);
@@ -51,7 +51,7 @@ export class Logger {
     }
 
     static info(msg: string, prefix: string = '') {
-        const logMsg = `${prefix}${msg}`;
+        const logMsg = `${prefix}${this.logPrefix()}${msg}`;
         if (this.logLevel >= 2) {
             if (this.enableConsole) console.log(`\x1b[37m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.info(logMsg);
@@ -59,7 +59,7 @@ export class Logger {
     }
 
     static debug(msg: string, prefix: string = '') {
-        const logMsg = `${prefix}${msg}`;
+        const logMsg = `${prefix}${this.logPrefix()}${msg}`;
         if (this.logLevel >= 3) {
             if (this.enableConsole) console.log(`\x1b[34m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.debug(logMsg);
@@ -101,5 +101,9 @@ export class Logger {
         });
 
         this.fileLogger = logger;
+    }
+
+    private static logPrefix() {
+        return `[${new Date().toISOString()}] `;
     }
 }

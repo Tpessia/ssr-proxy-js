@@ -20,6 +20,7 @@ export interface ProxyResult {
     text?: string;
     stream?: Stream;
     contentType?: string;
+    skipped?: boolean;
     error?: any;
     headers?: ProxyHeaders;
 }
@@ -111,6 +112,11 @@ export interface SsrProxyConfig {
      */
     customError?: string | ((err: any) => string);
     /**
+     * Skip to next proxy type on error
+     * @default true
+     */
+    skipOnError?: boolean;
+    /**
      * Function for processing the original request before proxying
      * @default undefined
      */
@@ -160,6 +166,16 @@ export interface SsrProxyConfig {
          * @default 60000
          */
         timeout?: number;
+        /**
+         * Cron expression for closing the shared browser instance
+         * @default undefined
+         */
+         cleanUpCron?: string;
+         /**
+          * Tz for cleanUpCron
+          * @default 'Etc/UTC'
+          */
+         cleanUpTz?: string;
     };
     /**
      * HTTP Proxy configuration
@@ -326,6 +342,11 @@ export interface SsrProxyConfig {
              * @default 5 * 60 * 1000 // 5 minutes
              */
             parallelism?: number;
+            /**
+             * Whether to close the shared browser instance after refreshing the cache
+             * @default true
+             */
+            closeBrowser?: boolean;
             /**
              * Whether to access routes as bot while auto refreshing
              * @default true

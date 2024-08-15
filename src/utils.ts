@@ -23,7 +23,7 @@ export function promiseParallel<T, TRej = T>(tasks: (() => Promise<T>)[], concur
         const pool: Promise<T | TRej>[] = [];
         let canceled: boolean = false;
 
-        tasks.slice(0, concurrencyLimit).map(e => runPromise(e));
+        tasks.slice(0, concurrencyLimit).map(async (e) => await runPromise(e));
 
         function runPromise(task: () => Promise<T>): Promise<T | TRej> {
             let promise: Promise<T | TRej> = task();
@@ -32,8 +32,8 @@ export function promiseParallel<T, TRej = T>(tasks: (() => Promise<T>)[], concur
 
             if (noReject) promise = promise.catch((e: TRej) => e);
 
-            promise.then(r => {
-                if (canceled) return;
+            promise = promise.then(async r => {
+                if (canceled) return r;
 
                 results.push(r);
 
@@ -46,12 +46,12 @@ export function promiseParallel<T, TRej = T>(tasks: (() => Promise<T>)[], concur
                 const nextIndex = concurrencyLimit + results.length - 1;
                 const nextTask = tasks[nextIndex];
 
-                if (!nextTask) return;
+                if (!nextTask) return r;
 
-                runPromise(nextTask);
-            })
-            
-            if (!noReject) promise.catch(err => { canceled = true; rej(err); });
+                return await runPromise(nextTask);
+            });
+
+            if (!noReject) promise = promise.catch(err => { canceled = true; rej(err); return err; });
 
             return promise;
         }

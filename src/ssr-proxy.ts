@@ -9,7 +9,7 @@ import mime from 'mime-types';
 import { scheduleJob } from 'node-schedule';
 import os from 'os';
 import path from 'path';
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer';
 import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
@@ -19,7 +19,11 @@ import { getOrCall, promiseParallel, promiseRetry, streamToString } from './util
 export class SsrProxy {
     private config: SsrProxyConfig;
     private proxyCache?: ProxyCache; // In-memory cache of rendered pages
-    private browserWSEndpoint?: string; // Reusable browser connection
+    private browser?: { // Reusable browser connection
+        browser: Promise<Browser>;
+        wsEndpoint: Promise<string>;
+        close: () => Promise<void>;
+    };
 
     constructor(config: SsrProxyConfig) {
         this.config = {
@@ -35,6 +39,7 @@ export class SsrProxy {
             resMiddleware: undefined,
             failStatus: 404,
             customError: undefined,
+            skipOnError: true,
             isBot: (method, url, headers) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
@@ -43,6 +48,8 @@ export class SsrProxy {
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
                 timeout: 60000,
+                cleanUpCron: undefined,
+                cleanUpTz: 'Etc/UTC',
             },
             httpProxy: {
                 shouldUse: true,
@@ -80,6 +87,7 @@ export class SsrProxy {
                     intervalTz: 'Etc/UTC',
                     retries: 3,
                     parallelism: 5,
+                    closeBrowser: true,
                     isBot: true,
                     routes: [{ method: 'GET', url: '/' }],
                 },
@@ -104,8 +112,18 @@ export class SsrProxy {
     }
 
     start() {
+        this.startCleanUpJob();
         this.startCacheJob();
         const app = this.listen();
+    }
+
+    private async startCleanUpJob() {
+        const cleanUpCron = this.config.ssr!.cleanUpCron;
+        const cleanUpTz = this.config.ssr!.cleanUpTz;
+        if (!cleanUpCron) return;
+        scheduleJob({ rule: cleanUpCron, tz: cleanUpTz }, async () => {
+            this.browser?.close();
+        });
     }
 
     private startCacheJob() {
@@ -143,11 +161,13 @@ export class SsrProxy {
                     async function runProxy() {
                         const targetUrl = new URL(route.url, $this.config.targetRoute!);
                         const params: ProxyParams = { isBot: cAutoCache.isBot!, cacheBypass: true, sourceUrl: route.url, targetUrl, method: route.method, headers: route.headers || {} };
-                        const { result, proxyType } = await $this.runProxy(params, logger);
+                        const { result, proxyType } = await $this.runProxy(params, cAutoCache.proxyOrder!, logger);
                     }
                 })), cAutoCache.parallelism!, true);
             } catch (err) {
                 logger.error('CacheRefresh', err, false);
+            } finally {
+                if (cAutoCache.closeBrowser) $this.browser?.close();
             }
         }
     }
@@ -171,7 +191,7 @@ export class SsrProxy {
 
                 const params: ProxyParams = { isBot, cacheBypass: false, method, sourceUrl, headers, targetUrl };
 
-                const { result, proxyType } = await this.runProxy(params, logger);
+                const { result, proxyType } = await this.runProxy(params, this.config.proxyOrder!, logger);
 
                 const proxyTypeParams: ProxyTypeParams = { ...params, proxyType };
 
@@ -260,15 +280,17 @@ export class SsrProxy {
         return app;
     }
 
-    private async runProxy(params: ProxyParams, logger: Logger) {
+    private async runProxy(params: ProxyParams, proxyOrder: ProxyType[], logger: Logger) {
+        if (!proxyOrder.length) throw new Error('Invalid Proxy Order');
+
         params.headers ||= {};
         params.method ||= 'GET';
 
         let result: ProxyResult = {};
-        let proxyType: ProxyType = this.config.proxyOrder![0];
+        let proxyType: ProxyType = proxyOrder[0];
 
-        for (let i in this.config.proxyOrder!) {
-            proxyType = this.config.proxyOrder![i];
+        for (let i in proxyOrder) {
+            proxyType = proxyOrder[i];
 
             const proxyParams = cloneDeep(this.config.reqMiddleware != null ? await this.config.reqMiddleware(params) : params);
 
@@ -287,7 +309,12 @@ export class SsrProxy {
                 params.lastError = err;
             }
 
-            if (result.error == null) break;
+            // Success
+            if (!result.skipped && result.error == null) break;
+
+            // Bubble up errors
+            if (!this.config.skipOnError && result.error != null)
+                throw (typeof result.error === 'string' ? new Error(result.error) : result.error);
         }
 
         if (this.config.resMiddleware != null) result = await this.config.resMiddleware(params, result);
@@ -302,9 +329,8 @@ export class SsrProxy {
 
         const shouldUse = getOrCall(cSsr.shouldUse, params)!;
         if (!shouldUse) {
-            const msg = 'Skipped SsrProxy';
-            logger.debug(`${msg}: ${params.targetUrl}`);
-            return { error: msg };
+            logger.debug(`Skipped SsrProxy: ${params.targetUrl}`);
+            return { skipped: true };
         }
 
         try {
@@ -354,9 +380,8 @@ export class SsrProxy {
 
         const shouldUse = getOrCall(cHttpProxy.shouldUse, params)!;
         if (!shouldUse) {
-            const msg = 'Skipped HttpProxy';
-            logger.debug(`${msg}: ${params.targetUrl}`);
-            return { error: msg };
+            logger.debug(`Skipped HttpProxy: ${params.targetUrl}`);
+            return { skipped: true };
         }
 
         try {
@@ -412,9 +437,8 @@ export class SsrProxy {
 
         const shouldUse = getOrCall(cStatic.shouldUse, params)!;
         if (!shouldUse) {
-            const msg = 'Skipped StaticProxy';
-            logger.debug(`${msg}: ${params.targetUrl}`);
-            return { error: msg };
+            logger.debug(`Skipped StaticProxy: ${params.targetUrl}`);
+            return { skipped: true };
         }
 
         try {
@@ -458,10 +482,23 @@ export class SsrProxy {
         const start = Date.now();
 
         try {
-            if (!this.browserWSEndpoint) {
-                logger.debug('SSR: Creating browserWSEndpoint');
-                const browser = await puppeteer.launch(cSsr.browserConfig!);
-                this.browserWSEndpoint = await browser.wsEndpoint();
+            if (!this.browser) {
+                logger.debug('SSR: Creating browser instance');
+                const browser = puppeteer.launch(cSsr.browserConfig!);
+                const wsEndpoint = browser.then(e => e.wsEndpoint());
+                this.browser = {
+                    browser,
+                    wsEndpoint,
+                    close: async () => {
+                        try {
+                            logger.debug('SSR: Closing browser instance');
+                            this.browser = undefined;
+                            (await browser).close();
+                        } catch (err) {
+                            logger.error('BrowserCloseError', err, false);
+                        }
+                    },
+                };
             }
 
             const url = new URL(urlStr);
@@ -472,7 +509,7 @@ export class SsrProxy {
                 url.searchParams.set(param.key, param.value);
 
             logger.debug('SSR: Connecting');
-            const browser = await puppeteer.connect({ browserWSEndpoint: this.browserWSEndpoint });
+            const browser = await puppeteer.connect({ browserWSEndpoint: await this.browser.wsEndpoint });
 
             logger.debug('SSR: New Page');
             const page = await browser.newPage();

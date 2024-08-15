@@ -90,7 +90,7 @@ const ssrProxy = new SsrProxy({
     httpPort: 8081,
     hostname: '0.0.0.0',
     targetRoute: BASE_PROXY_ROUTE,
-    proxyOrder: ['SsrProxy', 'StaticProxy', 'HttpProxy'],
+    proxyOrder: ['SsrProxy', 'HttpProxy', 'StaticProxy'],
     isBot: (method, url, headers) => true,
     failStatus: params => 404,
     customError: err => err.toString(),
@@ -130,12 +130,13 @@ const ssrProxy = new SsrProxy({
         autoRefresh: {
             enabled: true,
             shouldUse: () => true,
-            proxyOrder: ['SsrProxy'],
+            proxyOrder: ['SsrProxy', 'HttpProxy'],
             initTimeoutMs: 5 * 1000, // 5s
             intervalCron: '0 0 3 * * *', // every day at 3am
             intervalTz: 'Etc/UTC',
             retries: 3,
             parallelism: 5,
+            closeBrowser: true,
             isBot: true,
             routes: [
                 { method: 'GET', url: '/' },
@@ -213,6 +214,11 @@ interface SsrProxyConfig {
      */
     customError?: string | ((err: any) => string);
     /**
+     * Skip to next proxy type on error
+     * @default true
+     */
+    skipOnError?: boolean;
+    /**
      * Function for processing the original request before proxying
      * @default undefined
      */
@@ -234,7 +240,7 @@ interface SsrProxyConfig {
         /**
          * Browser configuration used by Puppeteer
          * @default
-         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] }
+         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 }
          */
         browserConfig?: SsrBrowerConfig;
         /**
@@ -262,6 +268,16 @@ interface SsrProxyConfig {
          * @default 60000
          */
         timeout?: number;
+        /**
+         * Cron expression for closing the shared browser instance
+         * @default undefined
+         */
+         cleanUpCron?: string;
+         /**
+          * Tz for cleanUpCron
+          * @default 'Etc/UTC'
+          */
+         cleanUpTz?: string;
     };
     /**
      * HTTP Proxy configuration
@@ -428,6 +444,11 @@ interface SsrProxyConfig {
              * @default 5 * 60 * 1000 // 5 minutes
              */
             parallelism?: number;
+            /**
+             * Whether to close the shared browser instance after refreshing the cache
+             * @default true
+             */
+            closeBrowser?: boolean;
             /**
              * Whether to access routes as bot while auto refreshing
              * @default true
