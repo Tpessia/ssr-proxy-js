@@ -9,7 +9,7 @@ import mime from 'mime-types';
 import { scheduleJob } from 'node-schedule';
 import os from 'os';
 import path from 'path';
-import puppeteer, { Browser } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer';
 import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
@@ -481,19 +481,22 @@ export class SsrProxy {
         const cSsr = this.config.ssr!;
         const start = Date.now();
 
+        let browser: Browser | undefined;
+        let page: Page | undefined;
+
         try {
             if (!this.browser) {
                 logger.debug('SSR: Creating browser instance');
-                const browser = puppeteer.launch(cSsr.browserConfig!);
-                const wsEndpoint = browser.then(e => e.wsEndpoint());
+                const browserMain = puppeteer.launch(cSsr.browserConfig!);
+                const wsEndpoint = browserMain.then(e => e.wsEndpoint());
                 this.browser = {
-                    browser,
-                    wsEndpoint,
+                    browser: browserMain,
+                    wsEndpoint: wsEndpoint,
                     close: async () => {
                         try {
                             logger.debug('SSR: Closing browser instance');
                             this.browser = undefined;
-                            (await browser).close();
+                            (await browserMain).close();
                         } catch (err) {
                             logger.error('BrowserCloseError', err, false);
                         }
@@ -512,10 +515,10 @@ export class SsrProxy {
             const wsEndpoint = this.browser?.wsEndpoint && await this.browser.wsEndpoint;
 
             logger.debug(`SSR: WSEndpoint=${wsEndpoint}`);
-            const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+            browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
 
             logger.debug('SSR: New Page');
-            const page = await browser.newPage();
+            page = await browser.newPage();
 
             // Intercept network requests
             let interceptCount = 0;
@@ -550,10 +553,6 @@ export class SsrProxy {
             // Serialized text of page DOM
             const text = await page.content();
 
-            await page.close();
-
-            logger.debug('SSR: Closed');
-
             const ttRenderMs = Date.now() - start;
 
             return { text, headers: resHeaders, ttRenderMs };
@@ -561,6 +560,10 @@ export class SsrProxy {
             let error = ((err && (err.message || err.toString())) || 'Proxy Error');
             const ttRenderMs = Date.now() - start;
             return { ttRenderMs, error };
+        } finally {
+            if (browser) await browser.disconnect();
+            if (page) await page.close();
+            logger.debug('SSR: Closed');
         }
     }
 
