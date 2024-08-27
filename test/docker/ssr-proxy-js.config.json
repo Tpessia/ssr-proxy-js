@@ -41,10 +41,12 @@
         "initTimeoutMs": 5000,
         "intervalCron": "0 0 3 * * *",
         "intervalTz": "Etc/UTC",
-        "parallelism": 5,
+        "parallelism": 2,
         "isBot": true,
         "routes": [
-          { "method": "GET", "url": "/" }
+          { "method": "GET", "url": "/" },
+          { "method": "GET", "url": "/nested" },
+          { "method": "GET", "url": "/nested.dot/index.html" }
         ]
       }
     }

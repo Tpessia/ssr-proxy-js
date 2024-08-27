@@ -561,8 +561,9 @@ export class SsrProxy {
             const ttRenderMs = Date.now() - start;
             return { ttRenderMs, error };
         } finally {
-            if (browser) await browser.disconnect();
+            logger.debug('SSR: Closing');
             if (page) await page.close();
+            if (browser) await browser.disconnect();
             logger.debug('SSR: Closed');
         }
     }
