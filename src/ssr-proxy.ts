@@ -509,7 +509,10 @@ export class SsrProxy {
                 url.searchParams.set(param.key, param.value);
 
             logger.debug('SSR: Connecting');
-            const browser = await puppeteer.connect({ browserWSEndpoint: await this.browser.wsEndpoint });
+            const wsEndpoint = this.browser?.wsEndpoint && await this.browser.wsEndpoint;
+
+            logger.debug(`SSR: WSEndpoint=${wsEndpoint}`);
+            const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
 
             logger.debug('SSR: New Page');
             const page = await browser.newPage();
