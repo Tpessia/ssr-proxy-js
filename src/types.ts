@@ -142,6 +142,11 @@ export interface SsrProxyConfig {
          */
         browserConfig?: SsrBrowerConfig;
         /**
+         * Use shared browser instance
+         * @default true
+         */
+        sharedBrowser?: boolean;
+        /**
          * Which query string params to include in the url before proxying
          * @default
          * [{ key: 'headless', value: 'true' }]

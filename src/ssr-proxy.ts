@@ -44,6 +44,7 @@ export class SsrProxy {
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
                 browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
+                sharedBrowser: true,
                 queryParams: [{ key: 'headless', value: 'true' }],
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
@@ -485,7 +486,7 @@ export class SsrProxy {
         let page: Page | undefined;
 
         try {
-            if (!this.browser) {
+            if (cSsr.sharedBrowser && !this.browser) {
                 logger.debug('SSR: Creating browser instance');
                 const browserMain = puppeteer.launch(cSsr.browserConfig!);
                 const wsEndpoint = browserMain.then(e => e.wsEndpoint());
@@ -515,7 +516,7 @@ export class SsrProxy {
             const wsEndpoint = this.browser?.wsEndpoint && await this.browser.wsEndpoint;
 
             logger.debug(`SSR: WSEndpoint=${wsEndpoint}`);
-            browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+            browser = wsEndpoint ? await puppeteer.connect({ browserWSEndpoint: wsEndpoint }) : await puppeteer.launch(cSsr.browserConfig!);
 
             logger.debug('SSR: New Page');
             page = await browser.newPage();
@@ -562,8 +563,11 @@ export class SsrProxy {
             return { ttRenderMs, error };
         } finally {
             logger.debug('SSR: Closing');
-            if (page) await page.close();
-            if (browser) await browser.disconnect();
+            if (page && !page.isClosed()) await page.close();
+            if (browser) {
+                if (cSsr.sharedBrowser) await browser.disconnect();
+                else await browser.close();
+            }
             logger.debug('SSR: Closed');
         }
     }
