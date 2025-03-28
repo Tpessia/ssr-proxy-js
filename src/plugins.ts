@@ -3,6 +3,7 @@ import { SsrBuildConfig } from './types';
 
 type Apply = 'serve' | 'build';
 type Enforce = 'pre' | 'post' | undefined;
+type Order = 'pre' | 'post' | undefined;
 type Event = 'writeBundle' | 'buildEnd' | 'closeBundle' | (string & {});
 
 export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { event?: Event, enforce?: Enforce, [key: string]: any; }) => {
@@ -11,10 +12,14 @@ export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { ev
   return {
     name: 'ssr-build',
     apply: 'build' as Apply,
-    enforce: 'post' as Enforce,
-    [pluginEvent]: async () => {
-      const ssrBuild = new SsrBuild(config);
-      await ssrBuild.start();
+    enforce: undefined as Enforce,
+    [pluginEvent]: {
+      sequential: true,
+      // order: 'pre' as Order,
+      handler: async () => {
+        const ssrBuild = new SsrBuild(config);
+        await ssrBuild.start();
+      },
     },
     ...(pluginOverride || {}),
   };

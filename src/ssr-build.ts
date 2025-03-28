@@ -18,6 +18,7 @@ export class SsrBuild extends SsrRender {
             src: 'src',
             dist: 'dist',
             stopOnError: false,
+            forceExit: false,
             serverMiddleware: undefined,
             reqMiddleware: undefined,
             resMiddleware: undefined,
@@ -83,13 +84,15 @@ export class SsrBuild extends SsrRender {
             Logger.debug('Closing the server...');
             server.close(() => {
                 Logger.debug('Shut down completed!');
-                process.exit(0);
+                if (this.config.forceExit) process.exit(0);
             });
 
-            setTimeout(() => {
-                Logger.error(`Shutdown`, 'Could not shut down in time, forcefully shutting down!');
-                process.exit(1);
-            }, 10000);
+            if (this.config.forceExit) {
+                setTimeout(() => {
+                    Logger.error(`Shutdown`, 'Could not shut down in time, forcefully shutting down!');
+                    process.exit(1);
+                }, 10000);
+            }
         };
         process.on('SIGTERM', shutDown);
         process.on('SIGINT', shutDown);

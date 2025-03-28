@@ -180,9 +180,14 @@ export interface SsrBuildConfig {
     dist?: string;
     /**
      * Indicates whether to stop the build process on error (non-200 status code) 
-     * @default true
+     * @default false
      */
     stopOnError?: boolean;
+    /**
+     * Indicates whether to force exit with process.exit on shutdown
+     * @default false
+     */
+    forceExit?: boolean;
     /**
      * Custom server middleware
      * @default undefined
@@ -311,6 +316,11 @@ export interface SsrProxyConfig {
      * @default true
      */
     skipOnError?: boolean;
+    /**
+     * Indicates whether to force exit with process.exit on shutdown
+     * @default true
+     */
+    forceExit?: boolean;
     /**
      * Function for processing the original request before proxying
      * @default undefined

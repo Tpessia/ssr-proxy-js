@@ -31,12 +31,13 @@ export class SsrProxy extends SsrRender {
             hostname: '0.0.0.0',
             targetRoute: 'http://localhost:80',
             proxyOrder: [ProxyType.SsrProxy, ProxyType.HttpProxy, ProxyType.StaticProxy],
-            reqMiddleware: undefined,
-            resMiddleware: undefined,
+            isBot: (method, url, headers) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
             failStatus: 404,
             customError: undefined,
             skipOnError: true,
-            isBot: (method, url, headers) => headers?.['user-agent'] ? isbot(headers['user-agent']) : false,
+            forceExit: true,
+            reqMiddleware: undefined,
+            resMiddleware: undefined,
             ssr: {
                 shouldUse: params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname)),
                 browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
@@ -130,13 +131,15 @@ export class SsrProxy extends SsrRender {
             Logger.info('Closing the server...');
             server.close(() => {
                 Logger.info('Shut down completed!');
-                process.exit(0);
+                if (this.config.forceExit) process.exit(0);
             });
 
-            setTimeout(() => {
-                Logger.error(`Shutdown`, 'Could not shut down in time, forcefully shutting down!');
-                process.exit(1);
-            }, 10000);
+            if (this.config.forceExit) {
+                setTimeout(() => {
+                    Logger.error(`Shutdown`, 'Could not shut down in time, forcefully shutting down!');
+                    process.exit(1);
+                }, 10000);
+            }
         };
         process.on('SIGTERM', shutDown);
         process.on('SIGINT', shutDown);
