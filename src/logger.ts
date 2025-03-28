@@ -18,11 +18,11 @@ export class Logger {
         }
     }
 
-    error(errName: string, err: any, withStack: boolean) {
+    error(errName: string, err: any, withStack: boolean = false) {
         Logger.error(errName, err, withStack, this.loggerIdStr);
     }
 
-    warn(errName: string, err: any, withStack: boolean) {
+    warn(errName: string, err: any, withStack: boolean = false) {
         Logger.warn(errName, err, withStack, this.loggerIdStr);
     }
 
@@ -34,16 +34,16 @@ export class Logger {
         Logger.debug(msg, this.loggerIdStr);
     }
 
-    static error(errName: string, err: any, withStack: boolean, prefix: string = '') {
-        const logMsg = `${prefix}${this.logPrefix()}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
+    static error(errName: string, err: any, withStack: boolean = false, prefix: string = '') {
+        const logMsg = `${this.logPrefix()}${prefix}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
         if (this.logLevel >= 1) {
             if (this.enableConsole) console.log(`\x1b[31m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.error(logMsg);
         }
     }
 
-    static warn(errName: string, err: any, withStack: boolean, prefix: string = '') {
-        const logMsg = `${prefix}${this.logPrefix()}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
+    static warn(errName: string, err: any, withStack: boolean = false, prefix: string = '') {
+        const logMsg = `${this.logPrefix()}${prefix}${errName}: ${this.errorStr(err)}${(withStack && ('\n' + err.stack)) || ''}`;
         if (this.logLevel >= 2) {
             if (this.enableConsole) console.log(`\x1b[33m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.warn(logMsg);
@@ -51,7 +51,7 @@ export class Logger {
     }
 
     static info(msg: string, prefix: string = '') {
-        const logMsg = `${prefix}${this.logPrefix()}${msg}`;
+        const logMsg = `${this.logPrefix()}${prefix}${msg}`;
         if (this.logLevel >= 2) {
             if (this.enableConsole) console.log(`\x1b[37m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.info(logMsg);
@@ -59,7 +59,7 @@ export class Logger {
     }
 
     static debug(msg: string, prefix: string = '') {
-        const logMsg = `${prefix}${this.logPrefix()}${msg}`;
+        const logMsg = `${this.logPrefix()}${prefix}${msg}`;
         if (this.logLevel >= 3) {
             if (this.enableConsole) console.log(`\x1b[34m${logMsg}\x1b[0m`);
             if (this.fileLogger) this.fileLogger.debug(logMsg);

@@ -3,30 +3,26 @@ import cloneDeep from 'clone-deep';
 import deepmerge from 'deepmerge';
 import express from 'express';
 import fs from 'fs';
+import http from 'http';
 import https from 'https';
 import { isbot } from 'isbot';
 import mime from 'mime-types';
 import { scheduleJob } from 'node-schedule';
 import os from 'os';
 import path from 'path';
-import puppeteer, { Browser, Page } from 'puppeteer';
 import { Stream } from 'stream';
 import { Logger } from './logger';
 import { ProxyCache } from './proxy-cache';
-import { CacheItem, LogLevel, ProxyHeaders, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig, SsrRenderResult } from './types';
+import { SsrRender } from './ssr-render';
+import { CacheItem, LogLevel, HttpHeaders, ProxyParams, ProxyResult, ProxyType, ProxyTypeParams, SsrProxyConfig } from './types';
 import { getOrCall, promiseParallel, promiseRetry, streamToString } from './utils';
 
-export class SsrProxy {
+export class SsrProxy extends SsrRender {
     private config: SsrProxyConfig;
     private proxyCache?: ProxyCache; // In-memory cache of rendered pages
-    private browser?: { // Reusable browser connection
-        browser: Promise<Browser>;
-        wsEndpoint: Promise<string>;
-        close: () => Promise<void>;
-    };
 
-    constructor(config: SsrProxyConfig) {
-        this.config = {
+    constructor(customConfig: SsrProxyConfig) {
+        const defaultConfig: SsrProxyConfig = {
             // TODO: AllowRedirect: boolean, return without redirecting
             httpPort: 8080,
             httpsPort: 8443,
@@ -60,7 +56,7 @@ export class SsrProxy {
             },
             static: {
                 shouldUse: false,
-                dirPath: path.join(process.cwd(), 'public'),
+                dirPath: 'public',
                 useIndexFile: path => path.endsWith('/'),
                 indexFile: 'index.html',
             },
@@ -95,13 +91,21 @@ export class SsrProxy {
             },
         };
 
-        if (config) {
-            this.config = deepmerge<SsrProxyConfig>(this.config, config, {
+        let config: SsrProxyConfig;
+
+        if (customConfig) {
+            config = deepmerge<SsrProxyConfig>(defaultConfig, customConfig, {
                 arrayMerge: (destArray, srcArray, opts) => srcArray,
             });
         } else {
-            console.log('No configuration found for ssr-proxy-js!');
+            console.warn('No configuration found for ssr-proxy-js, using default config!');
+            config = defaultConfig;
         }
+
+        if (config.static) config.static.dirPath = path.isAbsolute(config.static.dirPath!) ? config.static.dirPath! : path.join(process.cwd(), config.static.dirPath!);
+
+        super(config.ssr!);
+        this.config = config;
 
         const cLog = this.config.log;
         Logger.setLevel(cLog!.level!);
@@ -115,7 +119,27 @@ export class SsrProxy {
     start() {
         this.startCleanUpJob();
         this.startCacheJob();
-        const app = this.listen();
+
+        const { server } = this.listen();
+        
+        const shutDown = async () => {
+            Logger.info('Shutting down...');
+
+            await this.browserShutDown();
+
+            Logger.info('Closing the server...');
+            server.close(() => {
+                Logger.info('Shut down completed!');
+                process.exit(0);
+            });
+
+            setTimeout(() => {
+                Logger.error(`Shutdown`, 'Could not shut down in time, forcefully shutting down!');
+                process.exit(1);
+            }, 10000);
+        };
+        process.on('SIGTERM', shutDown);
+        process.on('SIGINT', shutDown);
     }
 
     private async startCleanUpJob() {
@@ -123,7 +147,7 @@ export class SsrProxy {
         const cleanUpTz = this.config.ssr!.cleanUpTz;
         if (!cleanUpCron) return;
         scheduleJob({ rule: cleanUpCron, tz: cleanUpTz }, async () => {
-            this.browser?.close();
+            this.sharedBrowser?.close();
         });
     }
 
@@ -152,10 +176,10 @@ export class SsrProxy {
 
                 await promiseParallel(cAutoCache.routes!.map((route) => () => new Promise(async (res, rej) => {
                     try {
-                        await promiseRetry(runProxy, cAutoCache.retries!, e => logger.warn('CacheRefresh Retry', e, false));
+                        await promiseRetry(runProxy, cAutoCache.retries!, e => logger.warn('CacheRefresh Retry', e));
                         res('ok');
                     } catch (err) {
-                        logger.error('CacheRefresh', err, false);
+                        logger.error('CacheRefresh', err);
                         rej(err);
                     }
 
@@ -165,10 +189,12 @@ export class SsrProxy {
                         const { result, proxyType } = await $this.runProxy(params, cAutoCache.proxyOrder!, logger);
                     }
                 })), cAutoCache.parallelism!, true);
+
+                logger.info(`Cache Refreshed!`);
             } catch (err) {
-                logger.error('CacheRefresh', err, false);
+                logger.error('CacheRefresh', err);
             } finally {
-                if (cAutoCache.closeBrowser) $this.browser?.close();
+                if (cAutoCache.closeBrowser) $this.sharedBrowser?.close();
             }
         }
     }
@@ -189,6 +215,8 @@ export class SsrProxy {
                 const headers = this.fixHeaders(req.headers);
 
                 const isBot = getOrCall(this.config.isBot, method, sourceUrl, headers)!;
+
+                logger.info(`[${method}] ${sourceUrl} | IsBot: ${isBot} | User Agent: ${headers['user-agent']}`);
 
                 const params: ProxyParams = { isBot, cacheBypass: false, method, sourceUrl, headers, targetUrl };
 
@@ -231,7 +259,7 @@ export class SsrProxy {
                 return res.send(errMsg);
             }
 
-            function setHeaders(headers: ProxyHeaders) {
+            function setHeaders(headers: HttpHeaders) {
                 for (let key in headers) {
                     try {
                         res.set(key, headers[key]);
@@ -252,20 +280,20 @@ export class SsrProxy {
             next();
         });
 
-        // HTTP Listen
+        let server: http.Server;
+
         if (this.config.httpPort) {
-            app.listen(this.config.httpPort, this.config.hostname!, () => {
-                Logger.info('\n----- Starting HTTP SSR Proxy -----');
+            // HTTP Listen
+            server = app.listen(this.config.httpPort, this.config.hostname!, () => {
+                Logger.info('----- Starting HTTP SSR Proxy -----');
                 Logger.info(`Listening on http://${this.config.hostname!}:${this.config.httpPort!}`);
                 Logger.info(`Proxy: ${this.config.targetRoute!}`);
                 Logger.info(`DirPath: ${this.config.static!.dirPath!}`);
                 Logger.info(`ProxyOrder: ${this.config.proxyOrder!}\n`);
             });
-        }
-
-        // HTTPS Listen
-        if (this.config.httpsPort && this.config.httpsKey && this.config.httpsCert) {
-            const server = https.createServer({
+        } else if (this.config.httpsPort && this.config.httpsKey && this.config.httpsCert) {
+            // HTTPS Listen
+            server = https.createServer({
                 key: fs.readFileSync(this.config.httpsKey),
                 cert: fs.readFileSync(this.config.httpsCert),
             }, app);
@@ -276,9 +304,11 @@ export class SsrProxy {
                 Logger.info(`DirPath: ${this.config.static!.dirPath!}`);
                 Logger.info(`ProxyOrder: ${this.config.proxyOrder!}\n`);
             });
+        } else {
+            throw new Error('Invalid Ports or Certificates');
         }
 
-        return app;
+        return { app, server };
     }
 
     private async runProxy(params: ProxyParams, proxyOrder: ProxyType[], logger: Logger) {
@@ -335,9 +365,7 @@ export class SsrProxy {
         }
 
         try {
-            logger.debug(`Using SsrProxy: ${params.targetUrl}`);
-
-            logger.info(`Bot Access | URL: ${params.sourceUrl} | User Agent: ${params.headers['user-agent']}`);
+            logger.info(`Using SsrProxy: ${params.targetUrl}`);
 
             // Try use Cache
 
@@ -349,7 +377,7 @@ export class SsrProxy {
 
             // Try use SsrProxy
 
-            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), logger, params.headers);
+            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), params.headers, logger, params.method);
 
             const isSuccess = error == null;
 
@@ -369,7 +397,7 @@ export class SsrProxy {
 
             return { text, contentType, headers: resHeaders };
         } catch (err: any) {
-            logger.error('SsrError', err, false);
+            logger.error('SsrError', err);
             return { error: err };
         }
     }
@@ -426,7 +454,7 @@ export class SsrProxy {
             return { stream: response.data, headers: resHeaders, contentType };
         } catch (err: any) {
             const error = err?.response?.data ? await streamToString(err.response.data).catch(err => err) : err;
-            logger.error('HttpProxyError', error, false);
+            logger.error('HttpProxyError', error);
             return { error };
         }
     }
@@ -473,102 +501,8 @@ export class SsrProxy {
 
             return { stream: fileStream, contentType };
         } catch (err: any) {
-            logger.error('StaticError', err, false);
+            logger.error('StaticError', err);
             return { error: err };
-        }
-    }
-
-    private async tryRender(urlStr: string, logger: Logger, headers: ProxyHeaders): Promise<SsrRenderResult> {
-        const cSsr = this.config.ssr!;
-        const start = Date.now();
-
-        let browser: Browser | undefined;
-        let page: Page | undefined;
-
-        try {
-            if (cSsr.sharedBrowser && !this.browser) {
-                logger.debug('SSR: Creating browser instance');
-                const browserMain = puppeteer.launch(cSsr.browserConfig!);
-                const wsEndpoint = browserMain.then(e => e.wsEndpoint());
-                this.browser = {
-                    browser: browserMain,
-                    wsEndpoint: wsEndpoint,
-                    close: async () => {
-                        try {
-                            logger.debug('SSR: Closing browser instance');
-                            this.browser = undefined;
-                            (await browserMain).close();
-                        } catch (err) {
-                            logger.error('BrowserCloseError', err, false);
-                        }
-                    },
-                };
-            }
-
-            const url = new URL(urlStr);
-
-            // Indicate headless render to client
-            // e.g. use to disable some features if ssr
-            for (let param of cSsr.queryParams!)
-                url.searchParams.set(param.key, param.value);
-
-            logger.debug('SSR: Connecting');
-            const wsEndpoint = this.browser?.wsEndpoint && await this.browser.wsEndpoint;
-
-            logger.debug(`SSR: WSEndpoint=${wsEndpoint}`);
-            browser = wsEndpoint ? await puppeteer.connect({ browserWSEndpoint: wsEndpoint }) : await puppeteer.launch(cSsr.browserConfig!);
-
-            logger.debug('SSR: New Page');
-            page = await browser.newPage();
-
-            // Intercept network requests
-            let interceptCount = 0;
-            await page.setRequestInterception(true);
-            page.on('request', req => {
-                interceptCount++;
-
-                // Ignore requests for resources that don't produce DOM (e.g. images, stylesheets, media)
-                const reqType = req.resourceType();
-                if (!cSsr.allowedResources!.includes(reqType)) return req.abort();
-
-                // Custom headers
-                let origHeaders = req.headers();
-                if (interceptCount === 1) {
-                    origHeaders = this.fixReqHeaders({ ...(headers || {}), ...(origHeaders || {}) });
-                    logger.debug(`SSR: Intercepted - ${JSON.stringify(origHeaders)}`);
-                }
-
-                // Pass through all other requests
-                req.continue({ headers: origHeaders });
-            });
-
-            logger.debug('SSR: Accessing');
-            const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil, timeout: cSsr.timeout });
-            // await page.waitForNetworkIdle({ idleTime: 1000, timeout: cSsr.timeout });
-
-            const ssrHeaders = response?.headers();
-            const resHeaders = this.fixResHeaders(ssrHeaders);
-
-            logger.debug(`SSR: Connected - ${JSON.stringify(resHeaders)}`);
-
-            // Serialized text of page DOM
-            const text = await page.content();
-
-            const ttRenderMs = Date.now() - start;
-
-            return { text, headers: resHeaders, ttRenderMs };
-        } catch (err: any) {
-            let error = ((err && (err.message || err.toString())) || 'Proxy Error');
-            const ttRenderMs = Date.now() - start;
-            return { ttRenderMs, error };
-        } finally {
-            logger.debug('SSR: Closing');
-            if (page && !page.isClosed()) await page.close();
-            if (browser) {
-                if (cSsr.sharedBrowser) await browser.disconnect();
-                else await browser.close();
-            }
-            logger.debug('SSR: Closed');
         }
     }
 
@@ -576,26 +510,6 @@ export class SsrProxy {
         const isHtml = () => /\.html$/.test(path) || !/\./.test(path)
         const type = mime.lookup(path) || (isHtml() ? 'text/html' : 'text/plain');
         return type;
-    }
-
-    private fixReqHeaders(headers: any) {
-        const proxyHeaders = this.fixHeaders(headers);
-        delete proxyHeaders['host'];
-        delete proxyHeaders['referer'];
-        delete proxyHeaders['user-agent'];
-        return proxyHeaders;
-    }
-
-    private fixResHeaders(headers: any) {
-        const proxyHeaders = this.fixHeaders({});
-        // TODO: fix response headers
-        // delete proxyHeaders['content-encoding'];
-        // delete proxyHeaders['transfer-encoding'];
-        return proxyHeaders;
-    }
-
-    private fixHeaders(headers: object) {
-        return Object.entries(headers).reduce((acc, [key, value]) => (value != null ? { ...acc, [key.toLowerCase()]: value?.toString() } : acc), {} as ProxyHeaders);
     }
 
     // Cache
@@ -635,7 +549,7 @@ export class SsrProxy {
             logger.debug(`Caching: ${cacheKey}`);
             this.proxyCache!.pipe(cacheKey, stream, contentType)
                 .then(() => this.tryClearCache(logger))
-                .catch(err => logger.error('SaveCacheStream', err, false));
+                .catch(err => logger.error('SaveCacheStream', err));
         }
     }
 

@@ -9,6 +9,8 @@ const LOGGING_PATH = path.join(os.tmpdir(), 'ssr-proxy/logs');
 
 console.log(`\nLogging at: ${LOGGING_PATH}`);
 
+// Proxy
+
 const ssrProxy = new SsrProxy({
     httpPort: 8081,
     hostname: '0.0.0.0',
@@ -72,8 +74,6 @@ const ssrProxy = new SsrProxy({
 
 ssrProxy.start();
 
-
-
 // Server
 
 const express = require('express');
@@ -92,5 +92,5 @@ app.get('/302', (req, res) => {
 });
 
 app.listen(BASE_PROXY_PORT, () => {
-  console.log(`Express listening at http://localhost:${BASE_PROXY_PORT}`);
+  console.log(`Express listening at ${BASE_PROXY_ROUTE}`);
 });

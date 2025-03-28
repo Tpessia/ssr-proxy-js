@@ -1,6 +1,194 @@
 import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Product, PuppeteerLifeCycleEvent, ResourceType } from 'puppeteer';
 import { Stream } from 'stream';
 
+// SSR
+
+export type HttpHeaders = Record<string, string>;
+
+export interface SsrRenderResult {
+    text?: string;
+    error?: string;
+    headers?: HttpHeaders;
+    ttRenderMs: number;
+}
+
+/**
+ * SSR config
+ * @public
+ */
+export interface SsrConfig {
+    /**
+     * Browser configuration used by Puppeteer
+     * @default
+     * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 }
+     */
+    browserConfig?: SsrBrowerConfig;
+    /**
+     * Use shared browser instance
+     * @default true
+     */
+    sharedBrowser?: boolean;
+    /**
+     * Which query string params to include in the url before proxying
+     * @default
+     * [{ key: 'headless', value: 'true' }]
+     */
+    queryParams?: {
+        key: string;
+        value: string;
+    }[];
+    /**
+     * Which resource types to load
+     * @default
+     * ['document', 'script', 'xhr', 'fetch']
+     */
+    allowedResources?: ResourceType[];
+    /**
+     * Which events to wait before returning the rendered HTML
+     * @default 'networkidle0'
+     */
+    waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
+    /**
+     * Timeout
+     * @default 60000
+     */
+    timeout?: number;
+}
+
+/**
+ * SSR job config
+ * @public
+ */
+export interface SsrJob {
+    /**
+     * Number of retries if fails
+     * @default 3
+     */
+    retries?: number;
+    /**
+     * Maximum number of parallel refreshes
+     * @default 5 * 60 * 1000 // 5 minutes
+     */
+    parallelism?: number;
+    /**
+     * Routes to auto refresh
+     * @default
+     * [{ method: 'GET', url: '/' }]
+     */
+    routes?: {
+        /**
+         * Route URL
+         * @example '/example/'
+         */
+        url: string;
+        /**
+         * Route HTTP Method
+         * @example 'GET'
+         */
+        method?: string;
+        /**
+         * Route Headers
+         * @example { 'X-Example': 'Test' }
+         */
+        headers?: HttpHeaders;
+    }[];
+}
+
+/**
+ * Logging configuration
+ * @public
+ */
+export interface LogConfig {
+    /**
+     * Logging level
+     * @example
+     * ```text
+     * None = 0, Error = 1, Info = 2, Debug = 3
+     * ```
+     * @default 2
+     */
+    level?: LogLevel;
+    /**
+     * Console logging configuration
+     */
+    console?: {
+        /**
+         * Indicates whether to enable the console logging method
+         * @default true
+         */
+        enabled?: boolean;
+    };
+    /**
+     * File logging configuration
+     */
+    file?: {
+        /**
+         * Indicates whether to enable the file logging method
+         * @default true
+         */
+        enabled?: boolean;
+        /**
+         * Absolute path of the logging directory
+         * @default path.join(os.tmpdir(), 'ssr-proxy-js/logs')
+         */
+        dirPath?: string;
+    };
+};
+
+// SSR Build
+
+export interface BuildResult {
+    text?: string;
+    filePath: string;
+    encoding: BufferEncoding;
+}
+
+export interface BuildParams {
+    method?: string;
+    targetUrl: URL;
+    headers: HttpHeaders;
+}
+
+/**
+ * Build config
+ * @public
+ */
+export interface SsrBuildConfig {
+    /**
+     * File server http port
+     * @default 8080
+     */
+    httpPort?: number;
+    /**
+     * Proxy server hostname
+     * @default 'localhost'
+     */
+    hostname?: string;
+    /**
+     * Source directory
+     * @default 'src'
+     */
+    src?: string;
+    /**
+     * Build output directory
+     * @default 'dist'
+     */
+    dist?: string;
+    /**
+     * Function for processing the original request before proxying
+     * @default undefined
+     */
+    reqMiddleware?: (params: BuildParams) => Promise<BuildParams>;
+    /**
+     * Function for processing the proxy result before serving
+     * @default undefined
+     */
+    resMiddleware?: (params: BuildParams, result: BuildResult) => Promise<BuildResult>;
+    ssr?: SsrConfig;
+    job?: SsrJob;
+    log?: LogConfig;
+}
+
 // SSR Proxy
 
 export enum ProxyType {
@@ -9,28 +197,19 @@ export enum ProxyType {
     StaticProxy = 'StaticProxy',
 }
 
-export interface SsrRenderResult {
-    text?: string;
-    error?: string;
-    headers?: ProxyHeaders;
-    ttRenderMs: number;
-}
-
 export interface ProxyResult {
     text?: string;
     stream?: Stream;
     contentType?: string;
     skipped?: boolean;
     error?: any;
-    headers?: ProxyHeaders;
+    headers?: HttpHeaders;
 }
-
-export type ProxyHeaders = Record<string, string>;
 
 export interface ProxyParams {
     sourceUrl: string;
-    method: string;
-    headers: ProxyHeaders;
+    method?: string;
+    headers: HttpHeaders;
     targetUrl: URL;
     isBot: boolean;
     cacheBypass: boolean;
@@ -99,7 +278,7 @@ export interface SsrProxyConfig {
      * 
      * @default Defaults to 'https://www.npmjs.com/package/isbot'
      */
-    isBot?: boolean | ((method: string, url: string, headers: ProxyHeaders) => boolean);
+    isBot?: boolean | ((method: string, url: string, headers: HttpHeaders) => boolean);
     /**
      * Which HTTP response status code to return in case of an error
      * @default 404
@@ -129,58 +308,22 @@ export interface SsrProxyConfig {
     /**
      * Server-Side Rendering configuration
      */
-    ssr?: {
+    ssr?: SsrConfig & {
         /**
          * Indicates if the SSR Proxy should be used
          * @default params => params.isBot && (/\.html$/.test(params.targetUrl.pathname) || !/\./.test(params.targetUrl.pathname))
          */
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
-         * Browser configuration used by Puppeteer
-         * @default
-         * { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 }
-         */
-        browserConfig?: SsrBrowerConfig;
-        /**
-         * Use shared browser instance
-         * @default true
-         */
-        sharedBrowser?: boolean;
-        /**
-         * Which query string params to include in the url before proxying
-         * @default
-         * [{ key: 'headless', value: 'true' }]
-         */
-        queryParams?: {
-            key: string;
-            value: string;
-        }[];
-        /**
-         * Which resource types to load
-         * @default
-         * ['document', 'script', 'xhr', 'fetch']
-         */
-        allowedResources?: ResourceType[];
-        /**
-         * Which events to wait before returning the rendered HTML
-         * @default 'networkidle0'
-         */
-        waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
-        /**
-         * Timeout
-         * @default 60000
-         */
-        timeout?: number;
-        /**
          * Cron expression for closing the shared browser instance
          * @default undefined
          */
-         cleanUpCron?: string;
-         /**
-          * Tz for cleanUpCron
-          * @default 'Etc/UTC'
-          */
-         cleanUpTz?: string;
+        cleanUpCron?: string;
+        /**
+         * Tz for cleanUpCron
+         * @default 'Etc/UTC'
+         */
+        cleanUpTz?: string;
     };
     /**
      * HTTP Proxy configuration
@@ -224,7 +367,7 @@ export interface SsrProxyConfig {
         shouldUse?: boolean | ((params: ProxyParams) => boolean);
         /**
          * Absolute path of the directory to serve
-         * @default path.join(path.dirname(process.argv[1]), 'public')
+         * @default 'public'
          */
         dirPath?: string;
         /**
@@ -241,42 +384,7 @@ export interface SsrProxyConfig {
     /**
      * Logging configuration
      */
-    log?: {
-        /**
-         * Logging level
-         * @example
-         * ```text
-         * None = 0, Error = 1, Info = 2, Debug = 3
-         * ```
-         * @default 2
-         */
-        level?: LogLevel;
-        /**
-         * Console logging configuration
-         */
-        console?: {
-            /**
-             * Indicates whether to enable the console logging method
-             * @default true
-             */
-            enabled?: boolean;
-        };
-        /**
-         * File logging configuration
-         */
-        file?: {
-            /**
-             * Indicates whether to enable the file logging method
-             * @default true
-             */
-            enabled?: boolean;
-            /**
-             * Absolute path of the logging directory
-             * @default path.join(os.tmpdir(), 'ssr-proxy-js/logs')
-             */
-            dirPath?: string;
-        };
-    };
+    log?: LogConfig;
     /**
      * Caching configuration
      */
@@ -306,7 +414,7 @@ export interface SsrProxyConfig {
          * 
          * Auto refresh will access the configured pages periodically, and cache the result to be used on following access
          */
-        autoRefresh?: {
+        autoRefresh?: SsrJob & {
             /**
              * Enable auto refreshing
              * @default false
@@ -323,6 +431,11 @@ export interface SsrProxyConfig {
              */
             proxyOrder?: ProxyType[];
             /**
+             * Whether to access routes as bot while auto refreshing
+             * @default true
+             */
+            isBot?: boolean;
+            /**
              * Delay before first refresh
              * @default 5 * 1000 // 5s
              */
@@ -338,47 +451,10 @@ export interface SsrProxyConfig {
              */
             intervalTz?: string;
             /**
-             * Number of retries if fails
-             * @default 3
-             */
-            retries?: number;
-            /**
-             * Maximum number of parallel refreshes
-             * @default 5 * 60 * 1000 // 5 minutes
-             */
-            parallelism?: number;
-            /**
              * Whether to close the shared browser instance after refreshing the cache
              * @default true
              */
             closeBrowser?: boolean;
-            /**
-             * Whether to access routes as bot while auto refreshing
-             * @default true
-             */
-            isBot?: boolean;
-            /**
-             * Routes to auto refresh
-             * @default
-             * [{ method: 'GET', url: '/' }]
-             */
-            routes?: {
-                /**
-                 * Route HTTP Method
-                 * @example 'GET'
-                 */
-                method: string;
-                /**
-                 * Route URL
-                 * @example '/example/'
-                 */
-                url: string;
-                /**
-                 * Route Headers
-                 * @example { 'X-Example': 'Test' }
-                 */
-                headers?: ProxyHeaders;
-            }[];
         };
     };
 }

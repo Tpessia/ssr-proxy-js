@@ -1,3 +1,1 @@
-const firstNode = document.body.childNodes[0];
-firstNode.innerHTML = `<strong>JS Imported!</strong><br/>${firstNode.innerHTML}`;
-document.body.prepend(firstNode);
+document.body.innerHTML = `\n\t<p><strong>JS Imported!</strong></p>${document.body.innerHTML}`;

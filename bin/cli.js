@@ -10,15 +10,22 @@ const fs = require('fs');
 const path = require('path');
 const minimist = require('minimist');
 const deepmerge = require('deepmerge');
-const { SsrProxy } = require('../dist/index');
+const { SsrProxy, SsrBuild } = require('../dist/index');
 
 const argv = minimist(process.argv.slice(2));
 
-const { _: argv_, c: argv_c, config: argv_config, ...argv_rest } = argv;
+const { _: argv_, mode: argv_mode, c: argv_c, config: argv_config, ...argv_rest } = argv;
 const explicitConfig = !!(argv_c || argv_config);
 
+if (!!argv_mode && argv_mode !== 'proxy' && argv_mode !== 'build') {
+    logWarn('Invalid mode, must be either "proxy" or "build"');
+    process.exit(1);
+}
+
+const mode = argv_mode || 'proxy';
+
 const options = { };
-options.configPath = argv_c || argv_config || './ssr-proxy-js.config.json';
+options.configPath = argv_c || argv_config || (mode === 'proxy' ? './ssr-proxy-js.config.json' : './ssr-build-js.config.json');
 options.configPath = path.resolve(process.cwd(), options.configPath);
 
 try {
@@ -36,6 +43,9 @@ try {
     logWarn('Unable to parse the config', err);
 }
 
+if (typeof argv_rest?.cache?.autoRefresh?.routes === 'string') argv_rest.cache.autoRefresh.routes = JSON.parse(argv_rest.cache.autoRefresh.routes);
+if (typeof argv_rest?.job?.routes === 'string') argv_rest.job.routes = JSON.parse(argv_rest.job.routes);
+
 options.config = deepmerge(options.config, argv_rest, {
     arrayMerge: (destArray, srcArray, opts) => srcArray,
 });
@@ -44,8 +54,15 @@ if (isEmpty(options.config)) {
     logWarn('No config file or cli arguments found!');
 }
 
-const ssrProxy = new SsrProxy(options.config);
-ssrProxy.start();
+if (mode === 'proxy') {
+    const ssrProxy = new SsrProxy(options.config);
+    ssrProxy.start();
+} else if (mode === 'build') {
+    const ssrBuild = new SsrBuild(options.config);
+    ssrBuild.start();
+}
+
+// Utils
 
 function logWarn(...msg) {
     if (!msg || !msg.length) return;

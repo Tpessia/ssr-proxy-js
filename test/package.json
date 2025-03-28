@@ -4,14 +4,20 @@
   "scripts": {
     "init": "npm install",
     "build": "cd .. && npm run build",
-    "start": "npm run build && nodemon --watch ./ --watch ../ index.js",
-    "start:ts": "npm run build && ts-node-dev --project tsconfig.json index.ts",
+    "start": "npm run build && nodemon --watch ./ --watch ../ proxy.js",
+    "start:ts": "npm run build && ts-node-dev --project tsconfig.json proxy.ts",
+    "start:build": "rimraf dist && cpx 'public/**/*' dist/ && npm run build && ts-node-dev --project tsconfig.json build.ts",
     "start:docker": "sudo docker compose -f ./docker/docker-compose.yml up --build",
-    "start:bin": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js -c ./ssr-proxy-js.config.json",
+    "start:cli": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js -c ./ssr-proxy-js.config.json",
+    "start:cli-build": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js --mode build -c ./ssr-build-js.config.json",
+    "start:cli-build-args": "npm run build && node ./node_modules/ssr-proxy-js-local/bin/cli.js --mode=build --httpPort=8080 --src=./public --dist=./dist --job.routes='[{\"url\":\"/\"},{\"url\":\"/nested\"}]'",
     "start:npx": "npm_config_yes=true npx --yes ssr-proxy-js -c ./ssr-proxy-js.config.json",
-    "test:axios": "node http-test.js",
+    "start:npx-build": "npm_config_yes=true npx --yes ssr-proxy-js --mode build -c ./ssr-build-js.config.json",
+    "test:request": "node test-request.js",
+    "test:stream": "node test-stream.js",
     "test:curl-bot": "curl -fsSL -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' http://localhost:8080/ > output.html && xdg-open output.html",
     "serve": "npx http-server ./public -p 8080 -a 0.0.0.0",
+    "serve:dist": "npx http-server ./dist -p 8080 -a 0.0.0.0",
     "docker": "sudo docker build -f Dockerfile -t ssr-proxy-js . && sudo docker run -it --rm -p 8080:8080 ssr-proxy-js"
   },
   "dependencies": {
@@ -21,7 +27,9 @@
     "ssr-proxy-js-local": "file:../"
   },
   "devDependencies": {
+    "cpx": "^1.5.0",
     "nodemon": "^2.0.15",
+    "rimraf": "^6.0.1",
     "ts-node-dev": "^1.1.8",
     "typescript": "^4.4.4"
   }

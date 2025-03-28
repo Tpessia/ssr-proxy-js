@@ -1,0 +1,33 @@
+{
+  "httpPort": 8080,
+  "hostname": "localhost",
+  "src": "public",
+  "dist": "dist",
+  "ssr": {
+    "browserConfig": { "headless": true, "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"], "timeout": 60000 },
+    "sharedBrowser": false,
+    "queryParams": [{ "key": "headless", "value": "true" }],
+    "allowedResources": ["document", "script", "xhr", "fetch"],
+    "waitUntil": "networkidle0",
+    "timeout": 60000
+  },
+  "log": {
+    "level": 2,
+    "console": {
+      "enabled": true
+    },
+    "file": {
+      "enabled": false
+    }
+  },
+  "job": {
+    "retries": 3,
+    "parallelism": 5,
+    "routes": [
+      { "method": "GET", "url": "/" },
+      { "method": "GET", "url": "/nested" },
+      { "method": "GET", "url": "/page.html" },
+      { "method": "GET", "url": "/iframe.html" }
+    ]
+  }
+}

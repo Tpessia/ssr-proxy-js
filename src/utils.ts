@@ -11,7 +11,7 @@ export function streamToString(stream: Stream): Promise<string> {
         if (!stream?.on) return res(stream as any);
         stream.on('data', chunk => chunks.push(Buffer.from(chunk)));
         stream.on('error', err => rej(err));
-        stream.on('end', () => res(Buffer.concat(chunks).toString('utf8')));
+        stream.on('end', () => res(Buffer.concat(chunks as any).toString('utf8')));
     });
 }
 
@@ -68,4 +68,66 @@ export async function promiseRetry<T>(func: () => Promise<T>, maxRetries: number
         if (funcAny._retries >= maxRetries) throw err;
         else return await promiseRetry(func, maxRetries, onError);
     }
+}
+
+export function promiseDeferred<T>(): { promise: Promise<T>, resolve: (value: T) => void, reject: (reason?: any) => void } {
+    let resolve: (value: T) => void;
+    let reject: (reason?: any) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve: resolve!, reject: reject! };
+}
+
+export const createLock = () => {
+    const queue: (() => Promise<void>)[] = [];
+
+    let active = false;
+
+    return (fn: () => Promise<any>) => {
+        const { promise, resolve, reject } = promiseDeferred();
+
+        // call function then next on queue
+        const exec = async () => {
+            await fn().then(resolve, reject);
+            if (queue.length > 0) {
+                queue.shift()!(); // call next function
+            } else {
+                active = false;
+            }
+        };
+
+        // call current or add to queue
+        if (active) {
+            queue.push(exec);
+        } else {
+            active = true;
+            exec();
+        }
+
+        return promise;
+    };
+};
+
+export function timeoutAsync(callback: () => void | Promise<void>, timeout: number) {
+    return new Promise<void>((res, rej) => {
+        setTimeout(async () => {
+            await callback();
+            res();
+        }, timeout);
+    });
+}
+
+export function intervalAsync(callback: () => boolean | Promise<boolean>, timeout: number, eager: boolean = false) {
+    return new Promise<void>(async (res, rej) => {
+        if (eager && await callback()) return res();
+        const interval = setInterval(async () => {
+            if (await callback()) {
+                clearInterval(interval);
+                return res();
+            }
+        }, timeout);
+    });
+}
+
+export function sleep(timeout: number) {
+    return timeoutAsync(async () => {}, timeout);
 }
