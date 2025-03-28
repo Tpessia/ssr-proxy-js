@@ -224,6 +224,7 @@ export class SsrProxy extends SsrRender {
 
                 const proxyTypeParams: ProxyTypeParams = { ...params, proxyType };
 
+                // if (proxyType === ProxyType.Redirect) return sendRedirect(result, proxyTypeParams);
                 if (result?.error != null) return sendFail(result, proxyTypeParams);
                 else if (result?.text != null) return sendText(result, proxyTypeParams);
                 else if (result?.stream != null) return sendStream(result, proxyTypeParams);
@@ -250,6 +251,12 @@ export class SsrProxy extends SsrRender {
                 setHeaders(result.headers!)
                 return res.send(result.text!);
             }
+
+            // async function sendRedirect(result: ProxyResult, params: ProxyTypeParams) {
+            //     res.status(result.status || 302);
+            //     setHeaders(result.headers!)
+            //     return res.redirect(result.text!);
+            // }
 
             async function sendFail(result: ProxyResult, params: ProxyTypeParams) {
                 res.status(getOrCall($this.config.failStatus, params)!);
@@ -326,6 +333,9 @@ export class SsrProxy extends SsrRender {
             const proxyParams = cloneDeep(this.config.reqMiddleware != null ? await this.config.reqMiddleware(params) : params);
 
             try {
+                // const redirect = await this.checkForRedirect(proxyParams, logger);
+                // if (redirect.status) return { result: redirect, proxyType: ProxyType.Redirect };
+
                 if (proxyType === ProxyType.SsrProxy) {
                     result = await this.runSsrProxy(proxyParams, logger);
                 } else if (proxyType === ProxyType.HttpProxy) {
@@ -505,6 +515,49 @@ export class SsrProxy extends SsrRender {
             return { error: err };
         }
     }
+
+    // private async checkForRedirect(proxyParams: ProxyParams, logger: Logger): Promise<ProxyResult> {
+    //     // TODO:
+    //     // cache the redirect
+    //     // fix targetUrl: Target (http://web-server:8080/)
+
+    //     try {
+    //         const targetUrl = proxyParams.targetUrl.toString();
+
+    //         logger.debug(`Redirect: Checking (${targetUrl})`);
+
+    //         // Use axios with a short timeout and redirect: false
+    //         const response = await axios.request({
+    //             url: targetUrl,
+    //             method: 'HEAD', // HEAD request is faster than GET
+    //             headers: this.fixReqHeaders(proxyParams.headers),
+    //             maxRedirects: 0, // Don't follow redirects
+    //             validateStatus: (status) => status < 400 || status === 404, // Accept any status that isn't an error
+    //             timeout: 5000 // 5 second timeout
+    //         });
+    
+    //         // Check if this is a redirect status
+    //         if (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+    //             logger.info(`Redirect: Detected (${targetUrl} - ${response.status})`);
+    //             const location = response.headers['location'];
+
+    //             if (location) {
+    //                 const redirectUrl = new URL(location, targetUrl).toString();
+    //                 logger.info(`Redirect: Target (${redirectUrl})`);
+
+    //                 return {
+    //                     text: redirectUrl,
+    //                     status: response.status,
+    //                     headers: this.fixResHeaders(response.headers),
+    //                 };
+    //             }
+    //         }
+            
+    //         return {};
+    //     } catch (err: any) {
+    //         return { error: err };
+    //     }
+    // }
 
     private getContentType(path: string) {
         const isHtml = () => /\.html$/.test(path) || !/\./.test(path)

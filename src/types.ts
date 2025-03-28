@@ -195,10 +195,12 @@ export enum ProxyType {
     SsrProxy = 'SsrProxy',
     HttpProxy = 'HttpProxy',
     StaticProxy = 'StaticProxy',
+    // Redirect = 'Redirect',
 }
 
 export interface ProxyResult {
     text?: string;
+    // status?: number;
     stream?: Stream;
     contentType?: string;
     skipped?: boolean;
