@@ -6,6 +6,7 @@ import { Stream } from 'stream';
 export type HttpHeaders = Record<string, string>;
 
 export interface SsrRenderResult {
+    status?: number;
     text?: string;
     error?: string;
     headers?: HttpHeaders;
@@ -139,6 +140,8 @@ export interface LogConfig {
 
 export interface BuildResult {
     text?: string;
+    status?: number;
+    headers?: HttpHeaders;
     filePath: string;
     encoding: BufferEncoding;
 }
@@ -175,6 +178,11 @@ export interface SsrBuildConfig {
      */
     dist?: string;
     /**
+     * Indicates whether to stop the build process on error (non-200 status code) 
+     * @default true
+     */
+    stopOnError?: boolean;
+    /**
      * Function for processing the original request before proxying
      * @default undefined
      */
@@ -200,7 +208,7 @@ export enum ProxyType {
 
 export interface ProxyResult {
     text?: string;
-    // status?: number;
+    status?: number;
     stream?: Stream;
     contentType?: string;
     skipped?: boolean;
@@ -475,6 +483,7 @@ export interface CacheDeletion {
 
 export interface InternalCacheItem {
     text: string;
+    status: number;
     contentType: string;
     hits: number;
     date: Date;

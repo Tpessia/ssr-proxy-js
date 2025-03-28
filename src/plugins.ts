@@ -4,8 +4,9 @@ import { SsrBuildConfig } from './types';
 type Apply = 'serve' | 'build';
 type Enforce = 'pre' | 'post' | undefined;
 
-export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginEvent?: string, pluginOverride?: any) => {
-  pluginEvent ||= 'writeBundle';
+export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { event?: string, enforce?: Enforce, [key: string]: any; }) => {
+  pluginOverride ||= {};
+  const pluginEvent = pluginOverride.event || 'buildEnd'; // writeBundle, buildEnd, closeBundle
   return {
     name: 'ssr-build',
     apply: 'build' as Apply,
@@ -16,4 +17,4 @@ export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginEvent?: string,
     },
     ...(pluginOverride || {}),
   };
-}
+};

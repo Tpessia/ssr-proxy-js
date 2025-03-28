@@ -65,7 +65,7 @@ export abstract class SsrRender {
             browser = await this.getBrowser(logger);
             if (!cSsr.sharedBrowser) this.tempBrowsers.push(browser);
 
-            // await sleep(10000); // test sigterm shutdown
+            // await sleep(10_000); // test sigterm shutdown
 
             const url = new URL(urlStr);
 
@@ -101,21 +101,26 @@ export abstract class SsrRender {
                 req.continue(override);
             });
 
+            // Render
+
             logger.debug('SSR: Accessing');
             const response = await page.goto(url.toString(), { waitUntil: cSsr.waitUntil, timeout: cSsr.timeout });
             // await page.waitForNetworkIdle({ idleTime: 1000, timeout: cSsr.timeout });
 
+            const ssrStatus = response?.status();
             const ssrHeaders = response?.headers();
             const resHeaders = this.fixResHeaders(ssrHeaders);
 
-            logger.debug(`SSR: Connected - ${JSON.stringify(resHeaders)}`);
+            logger.debug(`SSR: Rendered - ${JSON.stringify(resHeaders)}`);
 
-            // Serialized text of page DOM
+            // Serialize text from DOM
+
             const text = await page.content();
+            logger.debug(`SSR: DOM Serialized - ${text.length} size`);
 
             const ttRenderMs = Date.now() - start;
 
-            return { text, headers: resHeaders, ttRenderMs };
+            return { status: ssrStatus, text, headers: resHeaders, ttRenderMs };
         } catch (err: any) {
             let error = ((err && (err.message || err.toString())) || 'Proxy Error');
             const ttRenderMs = Date.now() - start;

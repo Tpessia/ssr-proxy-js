@@ -219,6 +219,7 @@ const config: SsrBuildConfig = {
     hostname: 'localhost',
     src: 'public',
     dist: 'dist',
+    stopOnError: false,
     reqMiddleware: async (params) => {
         params.headers['Referer'] = 'http://google.com';
         return params;

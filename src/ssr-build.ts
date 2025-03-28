@@ -12,12 +12,12 @@ export class SsrBuild extends SsrRender {
     private config: SsrBuildConfig;
 
     constructor(customConfig: SsrBuildConfig) {
-        console.log(process.argv[1], __dirname, __filename, process.cwd());
         const defaultConfig: SsrBuildConfig = {
             httpPort: 8080,
             hostname: 'localhost',
             src: 'src',
             dist: 'dist',
+            stopOnError: false,
             reqMiddleware: undefined,
             resMiddleware: undefined,
             ssr: {
@@ -93,9 +93,13 @@ export class SsrBuild extends SsrRender {
         process.on('SIGTERM', shutDown);
         process.on('SIGINT', shutDown);
 
-        await this.render();
-
-        await shutDown();
+        try {
+            await this.render();
+        } catch (err) {
+            throw err;
+        } finally {
+            await shutDown();
+        }
     }
 
     async serve() {
@@ -138,7 +142,7 @@ export class SsrBuild extends SsrRender {
                 await promiseRetry(runRender, cJob.retries!, e => logger.warn('SSR Build Retry', e, false));
                 res('ok');
             } catch (err) {
-                logger.error('SSR Build', err, false);
+                logger.error('SSR Build', err);
                 rej(err);
             }
 
@@ -148,14 +152,21 @@ export class SsrBuild extends SsrRender {
                 const params: BuildParams = { method: route.method, targetUrl, headers: route.headers || {} };
                 if ($this.config.reqMiddleware) await $this.config.reqMiddleware(params);
 
-                const { text, headers, ttRenderMs } = await $this.tryRender(targetUrl.toString(), route.headers || {}, logger, route.method);
+                const { text, status, headers, ttRenderMs } = await $this.tryRender(targetUrl.toString(), route.headers || {}, logger, route.method);
 
                 const filePath = path.join($this.config.dist!, targetUrl.pathname, targetUrl.pathname.endsWith('.html') ? '' : 'index.html');
-                const result: BuildResult = { text, filePath, encoding: 'utf-8' };
+                const result: BuildResult = { text, status, headers, filePath, encoding: 'utf-8' };
                 if ($this.config.resMiddleware) await $this.config.resMiddleware(params, result);
 
+                if (status !== 200) {
+                    const msg = `Render failed: ${targetUrl} - Status ${status} - ${ttRenderMs}ms\n${text}`;
+                    if ($this.config.stopOnError) throw new Error(msg);
+                    logger.warn('SSR Build', msg);
+                    return;
+                }
+
                 if (result.text == null) {
-                    logger.warn('SSR Build', `Empty content: ${targetUrl} - ${ttRenderMs}ms`, false);
+                    logger.warn('SSR Build', `Empty content: ${targetUrl} - ${ttRenderMs}ms`);
                     return;
                 }
 
@@ -167,7 +178,7 @@ export class SsrBuild extends SsrRender {
 
                 logger.debug(`SSR Built: ${targetUrl} - ${ttRenderMs}ms`);
             }
-        })), cJob.parallelism!, true);
+        })), cJob.parallelism!, false);
 
         Logger.info(`SSR build finished!`);
     }

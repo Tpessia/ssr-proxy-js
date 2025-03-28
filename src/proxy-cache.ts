@@ -30,16 +30,16 @@ export class ProxyCache {
         return { text: entry.text, contentType: entry.contentType };
     }
 
-    set(urlStr: string, text: string, contentType: string) {
-        return this.cache.set(urlStr, { text, contentType, hits: 0, date: new Date() });
+    set(urlStr: string, text: string, status: number, contentType: string) {
+        return this.cache.set(urlStr, { text, status, contentType, hits: 0, date: new Date() });
     }
 
     delete(urlStr: string) {
         return this.cache.delete(urlStr);
     }
 
-    async pipe(urlStr: string, stream: Stream, contentType: string) {
-        return await streamToString(stream).then(str => this.cache.set(urlStr, { text: str, contentType, hits: 0, date: new Date() }));
+    async pipe(urlStr: string, stream: Stream, status: number, contentType: string) {
+        return await streamToString(stream).then(str => this.cache.set(urlStr, { text: str, status, contentType, hits: 0, date: new Date() }));
     }
 
     tryClear() {

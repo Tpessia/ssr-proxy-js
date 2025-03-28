@@ -186,7 +186,7 @@ export class SsrProxy extends SsrRender {
                     async function runProxy() {
                         const targetUrl = new URL(route.url, $this.config.targetRoute!);
                         const params: ProxyParams = { isBot: cAutoCache.isBot!, cacheBypass: true, sourceUrl: route.url, targetUrl, method: route.method, headers: route.headers || {} };
-                        const { result, proxyType } = await $this.runProxy(params, cAutoCache.proxyOrder!, logger);
+                        const { proxyType, result } = await $this.runProxy(params, cAutoCache.proxyOrder!, logger);
                     }
                 })), cAutoCache.parallelism!, true);
 
@@ -220,7 +220,7 @@ export class SsrProxy extends SsrRender {
 
                 const params: ProxyParams = { isBot, cacheBypass: false, method, sourceUrl, headers, targetUrl };
 
-                const { result, proxyType } = await this.runProxy(params, this.config.proxyOrder!, logger);
+                const { proxyType, result } = await this.runProxy(params, this.config.proxyOrder!, logger);
 
                 const proxyTypeParams: ProxyTypeParams = { ...params, proxyType };
 
@@ -233,8 +233,15 @@ export class SsrProxy extends SsrRender {
                 return next(err);
             }
 
+            async function sendText(result: ProxyResult, params: ProxyTypeParams) {
+                res.status(result.status || 200);
+                res.contentType(result.contentType!);
+                setHeaders(result.headers!)
+                return res.send(result.text!);
+            }
+
             async function sendStream(result: ProxyResult, params: ProxyTypeParams) {
-                res.status(200);
+                res.status(result.status || 200);
                 res.contentType(result.contentType!);
                 setHeaders(result.headers!)
                 return result.stream!.on('error', err => {
@@ -243,13 +250,6 @@ export class SsrProxy extends SsrRender {
                     // const error = Logger.errorStr(result.error!);
                     return res.send();
                 }).pipe(res);
-            }
-
-            async function sendText(result: ProxyResult, params: ProxyTypeParams) {
-                res.status(200);
-                res.contentType(result.contentType!);
-                setHeaders(result.headers!)
-                return res.send(result.text!);
             }
 
             // async function sendRedirect(result: ProxyResult, params: ProxyTypeParams) {
@@ -360,7 +360,7 @@ export class SsrProxy extends SsrRender {
 
         if (this.config.resMiddleware != null) result = await this.config.resMiddleware(params, result);
 
-        return { result, proxyType };
+        return { proxyType, result };
     }
 
     private async runSsrProxy(params: ProxyParams, logger: Logger): Promise<ProxyResult> {
@@ -387,8 +387,9 @@ export class SsrProxy extends SsrRender {
 
             // Try use SsrProxy
 
-            let { text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), params.headers, logger, params.method);
+            let { status, text, error, headers: ssrHeaders, ttRenderMs } = await this.tryRender(params.targetUrl.toString(), params.headers, logger, params.method);
 
+            status ||= 200;
             const isSuccess = error == null;
 
             logger.info(`SSR Result | Render Time: ${ttRenderMs}ms | Success: ${isSuccess}${isSuccess ? '' : ` | Message: ${error}`}`);
@@ -403,9 +404,9 @@ export class SsrProxy extends SsrRender {
             
             const contentType = this.getContentType(params.targetUrl.pathname);
 
-            this.trySaveCache(text, contentType, cacheKey, typeParams, logger);
+            this.trySaveCache(text, status, contentType, cacheKey, typeParams, logger);
 
-            return { text, contentType, headers: resHeaders };
+            return { text, status, contentType, headers: resHeaders };
         } catch (err: any) {
             logger.error('SsrError', err);
             return { error: err };
@@ -453,15 +454,17 @@ export class SsrProxy extends SsrRender {
                 timeout: cHttpProxy.timeout,
             });
 
+            const status = response.status;
+
             const resHeaders = this.fixResHeaders(response.headers);
 
             logger.debug(`HttpProxy: Connected - ${JSON.stringify(resHeaders)}`);
 
             const contentType = this.getContentType(params.targetUrl.pathname);
 
-            this.trySaveCacheStream(response.data, contentType, cacheKey, typeParams, logger);
+            this.trySaveCacheStream(response.data, status, contentType, cacheKey, typeParams, logger);
 
-            return { stream: response.data, headers: resHeaders, contentType };
+            return { status: response.status, stream: response.data, headers: resHeaders, contentType };
         } catch (err: any) {
             const error = err?.response?.data ? await streamToString(err.response.data).catch(err => err) : err;
             logger.error('HttpProxyError', error);
@@ -507,9 +510,9 @@ export class SsrProxy extends SsrRender {
             
             const contentType = this.getContentType(filePath);
 
-            this.trySaveCacheStream(fileStream, contentType, cacheKey, typeParams, logger);
+            this.trySaveCacheStream(fileStream, 200, contentType, cacheKey, typeParams, logger);
 
-            return { stream: fileStream, contentType };
+            return { stream: fileStream, status: 200, contentType };
         } catch (err: any) {
             logger.error('StaticError', err);
             return { error: err };
@@ -583,24 +586,24 @@ export class SsrProxy extends SsrRender {
         return null;
     }
 
-    private trySaveCache(text: string, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
+    private trySaveCache(text: string, status: number, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
         const shouldUse = getOrCall(cCache.shouldUse, params)! && this.proxyCache!;
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
-            this.proxyCache!.set(cacheKey, text, contentType);
+            this.proxyCache!.set(cacheKey, text, status, contentType);
             this.tryClearCache(logger);
         }
     }
 
-    private trySaveCacheStream(stream: Stream, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
+    private trySaveCacheStream(stream: Stream, status: number, contentType: string, cacheKey: string, params: ProxyTypeParams, logger: Logger) {
         const cCache = this.config.cache!;
 
         const shouldUse = getOrCall(cCache.shouldUse, params)! && this.proxyCache!;
         if (shouldUse) {
             logger.debug(`Caching: ${cacheKey}`);
-            this.proxyCache!.pipe(cacheKey, stream, contentType)
+            this.proxyCache!.pipe(cacheKey, stream, status, contentType)
                 .then(() => this.tryClearCache(logger))
                 .catch(err => logger.error('SaveCacheStream', err));
         }

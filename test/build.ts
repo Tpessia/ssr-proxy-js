@@ -7,6 +7,7 @@ const config: SsrBuildConfig = {
     hostname: 'localhost',
     src: 'public',
     dist: 'dist',
+    // stopOnError: true,
     reqMiddleware: async (params) => {
         params.headers['Referer'] = 'http://google.com';
         return params;
@@ -38,7 +39,13 @@ const config: SsrBuildConfig = {
     job: {
         retries: 3,
         parallelism: 5,
-        routes: [{ method: 'GET', url: '/' },{ method: 'GET', url: '/nested' },{ method: 'GET', url: '/page.html' },{ method: 'GET', url: '/iframe.html' }],
+        routes: [
+            { method: 'GET', url: '/' },
+            { method: 'GET', url: '/nested' },
+            { method: 'GET', url: '/page.html' },
+            { method: 'GET', url: '/iframe.html' },
+            { method: 'GET', url: '/fail' }
+        ],
     },
 };
 
