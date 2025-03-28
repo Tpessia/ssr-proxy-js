@@ -7,16 +7,16 @@ const config: SsrBuildConfig = {
     hostname: 'localhost',
     src: 'public',
     dist: 'dist',
-    // reqMiddleware: async (params) => {
-    //     params.targetUrl.search = '';
-    //     return params;
-    // },
-    // resMiddleware: async (params, result) => {
-    //     if (result.text == null) return result;
-    //     result.text = result.text.replace('</html>', '<div>MIDDLEWARE</div></html>');
-    //     result.text = result.text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-    //     return result;
-    // },
+    reqMiddleware: async (params) => {
+        params.headers['Referer'] = 'http://google.com';
+        return params;
+    },
+    resMiddleware: async (params, result) => {
+        if (result.text == null) return result;
+        result.text = result.text.replace('</html>', '\n\t<div>MIDDLEWARE</div>\n</html>');
+        result.text = result.text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        return result;
+    },
     ssr: {
         browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
         sharedBrowser: true,
