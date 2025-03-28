@@ -3,10 +3,11 @@ import { SsrBuildConfig } from './types';
 
 type Apply = 'serve' | 'build';
 type Enforce = 'pre' | 'post' | undefined;
+type Event = 'writeBundle' | 'buildEnd' | 'closeBundle' | (string & {});
 
-export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { event?: string, enforce?: Enforce, [key: string]: any; }) => {
+export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { event?: Event, enforce?: Enforce, [key: string]: any; }) => {
   pluginOverride ||= {};
-  const pluginEvent = pluginOverride.event || 'buildEnd'; // writeBundle, buildEnd, closeBundle
+  const pluginEvent: Event = pluginOverride.event || 'buildEnd';
   return {
     name: 'ssr-build',
     apply: 'build' as Apply,

@@ -18,6 +18,7 @@ export class SsrBuild extends SsrRender {
             src: 'src',
             dist: 'dist',
             stopOnError: false,
+            serverMiddleware: undefined,
             reqMiddleware: undefined,
             resMiddleware: undefined,
             ssr: {
@@ -103,12 +104,18 @@ export class SsrBuild extends SsrRender {
     }
 
     async serve() {
-        const cfg = this.config
+        const cfg = this.config;
 
         const app = express();
 
         // Serve Static Files
         app.use(express.static(cfg.src!));
+
+        // Catch-all: Serve index.html for any non-file request
+        app.use((req, res, next) => {
+            if (cfg.serverMiddleware) cfg.serverMiddleware(req, res, next);
+            else res.sendFile(path.join(cfg.src!, 'index.html'));
+        });
 
         // Error Handler
         app.use((err: any, req: any, res: any, next: any) => {
@@ -152,31 +159,31 @@ export class SsrBuild extends SsrRender {
                 const params: BuildParams = { method: route.method, targetUrl, headers: route.headers || {} };
                 if ($this.config.reqMiddleware) await $this.config.reqMiddleware(params);
 
-                const { text, status, headers, ttRenderMs } = await $this.tryRender(targetUrl.toString(), route.headers || {}, logger, route.method);
+                const { text, status, headers, ttRenderMs } = await $this.tryRender(params.targetUrl.toString(), params.headers || {}, logger, params.method);
 
-                const filePath = path.join($this.config.dist!, targetUrl.pathname, targetUrl.pathname.endsWith('.html') ? '' : 'index.html');
+                const filePath = path.join($this.config.dist!, params.targetUrl.pathname, params.targetUrl.pathname.endsWith('.html') ? '' : 'index.html');
                 const result: BuildResult = { text, status, headers, filePath, encoding: 'utf-8' };
                 if ($this.config.resMiddleware) await $this.config.resMiddleware(params, result);
 
                 if (status !== 200) {
-                    const msg = `Render failed: ${targetUrl} - Status ${status} - ${ttRenderMs}ms\n${text}`;
+                    const msg = `Render failed: ${params.targetUrl} - Status ${status} - ${ttRenderMs}ms\n${text}`;
                     if ($this.config.stopOnError) throw new Error(msg);
                     logger.warn('SSR Build', msg);
                     return;
                 }
 
                 if (result.text == null) {
-                    logger.warn('SSR Build', `Empty content: ${targetUrl} - ${ttRenderMs}ms`);
+                    logger.warn('SSR Build', `Empty content: ${params.targetUrl} - ${ttRenderMs}ms`);
                     return;
                 }
 
-                logger.info(`Saving render: ${targetUrl} -> ${result.filePath}`);
+                logger.info(`Saving render: ${params.targetUrl} -> ${result.filePath}`);
 
                 const dirPath = path.dirname(result.filePath);
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
                 fs.writeFileSync(result.filePath, result.text, { encoding: result.encoding });
 
-                logger.debug(`SSR Built: ${targetUrl} - ${ttRenderMs}ms`);
+                logger.debug(`SSR Built: ${params.targetUrl} - ${ttRenderMs}ms`);
             }
         })), cJob.parallelism!, false);
 

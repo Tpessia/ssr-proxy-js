@@ -8,6 +8,10 @@ const config: SsrBuildConfig = {
     src: 'public',
     dist: 'dist',
     // stopOnError: true,
+    serverMiddleware: async (req, res, next) => {
+        // res.sendFile(path.join(__dirname, 'public/index.html'));
+        next();
+    },
     reqMiddleware: async (params) => {
         params.headers['Referer'] = 'http://google.com';
         return params;

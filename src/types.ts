@@ -1,3 +1,4 @@
+import { NextFunction, Request, Response } from 'express';
 import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Product, PuppeteerLifeCycleEvent, ResourceType } from 'puppeteer';
 import { Stream } from 'stream';
 
@@ -182,6 +183,11 @@ export interface SsrBuildConfig {
      * @default true
      */
     stopOnError?: boolean;
+    /**
+     * Custom server middleware
+     * @default undefined
+     */
+    serverMiddleware?: (req: Request, res: Response, next: NextFunction) => Promise<void>;
     /**
      * Function for processing the original request before proxying
      * @default undefined
