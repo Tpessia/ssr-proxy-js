@@ -70,7 +70,7 @@ export class SsrBuild extends SsrRender {
         Logger.configFile(cLog!.file!.enabled!, cLog!.file!.dirPath!);
     }
 
-    async start() {
+    async start(): Promise<BuildResult[]> {
         Logger.info(`SrcPath: ${this.config.src!}`);
         Logger.info(`DistPath: ${this.config.dist!}`);
 
@@ -98,7 +98,7 @@ export class SsrBuild extends SsrRender {
         process.on('SIGINT', shutDown);
 
         try {
-            await this.render();
+            return await this.render();
         } catch (err) {
             throw err;
         } finally {
@@ -138,25 +138,25 @@ export class SsrBuild extends SsrRender {
         return { app, server };
     }        
 
-    async render() {
+    async render(): Promise<BuildResult[]> {
         const $this = this;
         const cJob = this.config.job!;
 
         const routesStr = '> ' + cJob.routes!.map(e => `[${e.method ?? 'GET'}] ${e.url}`).join('\n> ');
         Logger.info(`SSR Building (p:${cJob.parallelism},r:${cJob.retries}):\n${routesStr}`);
 
-        await promiseParallel(cJob.routes!.map((route) => () => new Promise(async (res, rej) => {
+        const results = await promiseParallel<BuildResult>(cJob.routes!.map((route) => () => new Promise(async (res, rej) => {
             const logger = new Logger(true);
 
             try {
-                await promiseRetry(runRender, cJob.retries!, e => logger.warn('SSR Build Retry', e, false));
-                res('ok');
+                const result = await promiseRetry(runRender, cJob.retries!, e => logger.warn('SSR Build Retry', e, false));
+                res(result);
             } catch (err) {
                 logger.error('SSR Build', err);
                 rej(err);
             }
 
-            async function runRender() {
+            async function runRender(): Promise<BuildResult> {
                 const targetUrl = new URL(route.url, `http://${$this.config.hostname!}:${$this.config.httpPort!}`);
 
                 const params: BuildParams = { method: route.method, targetUrl, headers: route.headers || {} };
@@ -172,12 +172,12 @@ export class SsrBuild extends SsrRender {
                     const msg = `Render failed: ${params.targetUrl} - Status ${status} - ${ttRenderMs}ms\n${text}`;
                     if ($this.config.stopOnError) throw new Error(msg);
                     logger.warn('SSR Build', msg);
-                    return;
+                    return result;
                 }
 
                 if (result.text == null) {
                     logger.warn('SSR Build', `Empty content: ${params.targetUrl} - ${ttRenderMs}ms`);
-                    return;
+                    return result;
                 }
 
                 logger.info(`Saving render: ${params.targetUrl} -> ${result.filePath}`);
@@ -187,9 +187,13 @@ export class SsrBuild extends SsrRender {
                 fs.writeFileSync(result.filePath, result.text, { encoding: result.encoding });
 
                 logger.debug(`SSR Built: ${params.targetUrl} - ${ttRenderMs}ms`);
+
+                return result;
             }
         })), cJob.parallelism!, false);
 
         Logger.info(`SSR build finished!`);
+
+        return results;
     }
 }

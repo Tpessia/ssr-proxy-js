@@ -16,8 +16,8 @@
     "test:request": "node test-request.js",
     "test:stream": "node test-stream.js",
     "test:curl-bot": "curl -fsSL -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' http://localhost:8080/ > output.html && xdg-open output.html",
-    "serve": "npx http-server ./public -p 8080 -a 0.0.0.0",
-    "serve:dist": "npx http-server ./dist -p 8080 -a 0.0.0.0",
+    "serve": "npm_config_yes=true npx --yes http-server ./public -p 8080 -a 0.0.0.0",
+    "serve:dist": "npm_config_yes=true npx --yes http-server ./dist -p 8080 -a 0.0.0.0",
     "docker": "sudo docker build -f Dockerfile -t ssr-proxy-js . && sudo docker run -it --rm -p 8080:8080 ssr-proxy-js"
   },
   "dependencies": {

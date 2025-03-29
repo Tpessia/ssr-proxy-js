@@ -1,3 +1,6 @@
+// https://rollupjs.org/plugin-development/#writebundle
+// https://vite.dev/guide/api-plugin
+
 import { SsrBuild } from './ssr-build';
 import { SsrBuildConfig } from './types';
 
@@ -6,19 +9,18 @@ type Enforce = 'pre' | 'post' | undefined;
 type Order = 'pre' | 'post' | undefined;
 type Event = 'writeBundle' | 'buildEnd' | 'closeBundle' | (string & {});
 
-export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { event?: Event, enforce?: Enforce, [key: string]: any; }) => {
-  pluginOverride ||= {};
-  const pluginEvent: Event = pluginOverride.event || 'buildEnd';
+export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { apply?: Apply, enforce?: Enforce, [key: string]: any; }) => {
   return {
-    name: 'ssr-build',
+    name: 'ssr-build-js',
     apply: 'build' as Apply,
-    enforce: undefined as Enforce,
-    [pluginEvent]: {
+    // enforce: 'pre' as Enforce,
+    writeBundle: {
       sequential: true,
       // order: 'pre' as Order,
-      handler: async () => {
+      async handler() {
         const ssrBuild = new SsrBuild(config);
-        await ssrBuild.start();
+        const result = await ssrBuild.start();
+        result.forEach(e => (this as any).emitFile({ type: 'asset', fileName: e.filePath, source: e.text }));
       },
     },
     ...(pluginOverride || {}),
