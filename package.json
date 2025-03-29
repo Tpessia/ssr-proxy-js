@@ -1,6 +1,6 @@
 {
   "name": "ssr-proxy-js",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "description": "Server-Side Rendering Proxy",
   "keywords": [
     "ssr",
