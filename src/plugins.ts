@@ -17,10 +17,15 @@ export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { ap
     writeBundle: {
       sequential: true,
       // order: 'pre' as Order,
-      async handler() {
+      async handler(outputOptions: any, bundle: any) {
         const ssrBuild = new SsrBuild(config);
         const result = await ssrBuild.start();
-        result.forEach(e => (this as any).emitFile({ type: 'asset', fileName: e.urlPath.replace(/^\/+/, ''), source: e.text }));
+        result.forEach(e => {
+          const fileName = e.urlPath.replace(/^\/+/, '');
+          const duplicate = Object.keys(bundle).find(e => e === fileName);
+          if (duplicate) delete bundle[duplicate];
+          (this as any).emitFile({ type: 'asset', fileName, source: e.text });
+        });
       },
     },
     ...(pluginOverride || {}),
