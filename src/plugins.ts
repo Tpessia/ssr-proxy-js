@@ -20,7 +20,7 @@ export const ssrBuildVitePlugin = (config: SsrBuildConfig, pluginOverride?: { ap
       async handler() {
         const ssrBuild = new SsrBuild(config);
         const result = await ssrBuild.start();
-        result.forEach(e => (this as any).emitFile({ type: 'asset', fileName: e.filePath, source: e.text }));
+        result.forEach(e => (this as any).emitFile({ type: 'asset', fileName: e.urlPath.replace(/^\/+/, ''), source: e.text }));
       },
     },
     ...(pluginOverride || {}),

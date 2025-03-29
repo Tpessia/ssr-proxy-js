@@ -117,7 +117,7 @@ export class SsrBuild extends SsrRender {
         // Catch-all: Serve index.html for any non-file request
         app.use((req, res, next) => {
             if (cfg.serverMiddleware) cfg.serverMiddleware(req, res, next);
-            else res.sendFile(path.join(cfg.src!, 'index.html'));
+            else res.sendFile(path.join(cfg.src!, 'index.html')); // serve root index.html
         });
 
         // Error Handler
@@ -164,8 +164,9 @@ export class SsrBuild extends SsrRender {
 
                 const { text, status, headers, ttRenderMs } = await $this.tryRender(params.targetUrl.toString(), params.headers || {}, logger, params.method);
 
-                const filePath = path.join($this.config.dist!, params.targetUrl.pathname, params.targetUrl.pathname.endsWith('.html') ? '' : 'index.html');
-                const result: BuildResult = { text, status, headers, filePath, encoding: 'utf-8' };
+                const urlPath = path.join(params.targetUrl.pathname, params.targetUrl.pathname.endsWith('.html') ? '' : 'index.html');
+                const filePath = path.join($this.config.dist!, urlPath);
+                const result: BuildResult = { text, status, headers, urlPath, filePath, encoding: 'utf-8' };
                 if ($this.config.resMiddleware) await $this.config.resMiddleware(params, result);
 
                 if (status !== 200) {

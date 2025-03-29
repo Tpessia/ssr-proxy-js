@@ -10,6 +10,7 @@ const config: SsrBuildConfig = {
     // stopOnError: true,
     serverMiddleware: async (req, res, next) => {
         // res.sendFile(path.join(__dirname, 'public/index.html'));
+        // res.sendFile(path.join(__dirname, 'public', req.path));
         next();
     },
     reqMiddleware: async (params) => {

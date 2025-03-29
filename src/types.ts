@@ -143,6 +143,7 @@ export interface BuildResult {
     text?: string;
     status?: number;
     headers?: HttpHeaders;
+    urlPath: string;
     filePath: string;
     encoding: BufferEncoding;
 }
