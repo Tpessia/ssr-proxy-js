@@ -1,7 +1,7 @@
 import puppeteer, { Browser, ContinueRequestOverrides, Page } from 'puppeteer';
 import { Logger } from './logger';
 import { HttpHeaders, SsrConfig, SsrRenderResult } from './types';
-import { createLock } from './utils';
+import { createLock, sleep } from './utils';
 
 export abstract class SsrRender {
     constructor(protected configSsr: SsrConfig) { }
@@ -112,6 +112,8 @@ export abstract class SsrRender {
             const resHeaders = this.fixResHeaders(ssrHeaders);
 
             logger.debug(`SSR: Rendered - ${JSON.stringify(resHeaders)}`);
+
+            if (cSsr.sleep) await sleep(cSsr.sleep);
 
             // Serialize text from DOM
 

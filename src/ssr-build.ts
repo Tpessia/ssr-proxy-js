@@ -29,6 +29,7 @@ export class SsrBuild extends SsrRender {
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
                 timeout: 60000,
+                sleep: undefined,
             },
             log: {
                 level: LogLevel.Info,
@@ -60,6 +61,7 @@ export class SsrBuild extends SsrRender {
 
         config.src = path.isAbsolute(config.src!) ? config.src! : path.join(process.cwd(), config.src!);
         config.dist = path.isAbsolute(config.dist!) ? config.dist! : path.join(process.cwd(), config.dist!);
+        if (config.job!.parallelism! < 1) throw new Error(`Parallelism should be greater than 0 (${config.job!.parallelism})`);
 
         super(config.ssr!);
         this.config = config;

@@ -46,6 +46,7 @@ export class SsrProxy extends SsrRender {
                 allowedResources: ['document', 'script', 'xhr', 'fetch'],
                 waitUntil: 'networkidle0',
                 timeout: 60000,
+                sleep: undefined,
                 cleanUpCron: undefined,
                 cleanUpTz: 'Etc/UTC',
             },
@@ -104,6 +105,7 @@ export class SsrProxy extends SsrRender {
         }
 
         if (config.static) config.static.dirPath = path.isAbsolute(config.static.dirPath!) ? config.static.dirPath! : path.join(process.cwd(), config.static.dirPath!);
+        if (config.cache!.autoRefresh!.parallelism! < 1) throw new Error(`Parallelism should be greater than 0 (${config.cache!.autoRefresh!.parallelism})`);
 
         super(config.ssr!);
         this.config = config;

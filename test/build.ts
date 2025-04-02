@@ -24,12 +24,13 @@ const config: SsrBuildConfig = {
         return result;
     },
     ssr: {
-        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
+        browserConfig: { headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
         sharedBrowser: true,
         queryParams: [{ key: 'headless', value: 'true' }],
         allowedResources: ['document', 'script', 'xhr', 'fetch'],
         waitUntil: 'networkidle0',
         timeout: 60000,
+        sleep: 1000,
     },
     log: {
         level: LogLevel.Info,
@@ -43,13 +44,13 @@ const config: SsrBuildConfig = {
     },
     job: {
         retries: 3,
-        parallelism: 5,
+        parallelism: 3,
         routes: [
             { method: 'GET', url: '/' },
             { method: 'GET', url: '/nested' },
             { method: 'GET', url: '/page.html' },
             { method: 'GET', url: '/iframe.html' },
-            { method: 'GET', url: '/fail' }
+            { method: 'GET', url: '/fail' },
         ],
     },
 };

@@ -1,3 +1,7 @@
+# curl -fsSL -A 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' http://localhost/ > output-bot.html
+# curl -fsSL -A 'bingbot/2.0' https://investtester.com/ > output-bot.html
+# Chrome DevTools -> Network conditions -> User agent -> bingbot/2.0 / Console -> Ctrl + Shift + P -> Disable JavaScript
+
 # BUILD
 
 FROM node:20.12.2-bookworm AS build

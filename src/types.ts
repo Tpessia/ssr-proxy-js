@@ -55,6 +55,11 @@ export interface SsrConfig {
      * @default 60000
      */
     timeout?: number;
+    /**
+     * Sleep time for debugging
+     * @default undefined
+     */
+    sleep?: number;
 }
 
 /**
