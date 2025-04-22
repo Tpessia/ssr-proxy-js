@@ -3,7 +3,7 @@
 
 # SSRProxy.js
 
-A Server-Side Rendering Proxy and Builder focused on customization and flexibility!
+A Node.js tool for Server-Side Rendering (SSR) and Static Site Generation (SSG) using headless Chrome via Puppeteer.
 
 Server-Side Rendering, or SSR for short, is a technique used to serve Single-Page Applications (SPAs, e.g. React.js, Vue.js and Angular based websites) with Web Crawlers in mind, such as Googlebot. Crawlers are used everywhere in the internet to a variety of objectives, with the most known being for indexing the web for search engines, which is done by companies such as Google (Googlebot), Bing (Bingbot) and DuckDuckGo (DuckDuckBot).
 
@@ -38,7 +38,7 @@ Caching allows us to increase the performance of the web serving by preventing e
 
 In case of a human user access, we can serve the web site the "normal" way, without asking the SSR to pre-render the page. For that it's possible to use 3 types of proxies: SSR Proxy, HTTP Proxy or Static File Serving, in any order that you see fit. Firstly, the order of priority should be configured with the "proxyOrder" option, so for example, if configured as ['SsrProxy', 'HttpProxy', 'StaticProxy'], "ssr.shouldUse" will ask if SSR should be used, if it returns false, then "httpProxy.shouldUse" will ask if HTTP Proxy should be used, and finally, "static.shouldUse" will ask if Static File Serving should be used. If the return of all proxy options is false, or if one of then returns a exception (e.g. page not found), the web server will return a empty HTTP response with status equals to the return of the "failStatus" callback.
 
-### Pre-Build
+## Static Site Generator mode
 
 If all your content is static, meaning it won't change dependending on who or how your pages are accessed, you can pre-build all your routes using the `--mode=build` option, which will access all your pre-defined routes in build time, render the HTML, and save the resulting content back to a dist folder. You can then serve your dist folder instead of serving your original non pre-rendered bundle.
 
