@@ -28,19 +28,114 @@ For the contents of a SPA to be correct, the JavaScript files should be loaded a
 The implemantation of this package is hugelly inspired by an article from Google, using Pupperteer as it's engine:
 https://developers.google.com/web/tools/puppeteer/articles/ssr
 
-The main problem regarding the workflow described above is that the process of rendering the web page through a browser takes some time, so if done incorrectly, it might have a big impact on the users experience. That's why this package also comes with two essencial feature: **Caching**, **Fallbacks** and **Pre-Build**.
+The main problem regarding the workflow described above is that the process of rendering the web page through a browser takes some time, so if done incorrectly, it might have a big impact on the users experience. That's why this package also comes with two essencial feature: **Caching**, **Fallbacks** and **Static Site Generation**.
 
-### Caching
+## SSR Build (Static Site Generator mode)
 
-Caching allows us to increase the performance of the web serving by preventing excessive new renders for web pages that have been accessed recently. Caching is highly configurable to allow total control of the workflow, for example, it's possible to decide if cache should or shouldn't be used each time the website is accessed, with the "shouldUse" option. Also, it's possible to configure a automatic cache refresh, using the "cache.autoRefresh" configuration.
+Build pre-rendered pages to serve to your users, without any added server complexity or extra response delay, using your server tool of choice (e g. nginx).
 
-### Fallbacks
+If all your content is static, meaning it won't change dependending on who or how your pages are accessed, you can pre-build all your routes using the `--mode=build` option, instead of building in real time with the default SSR Proxy mode. This will access all your pre-defined routes in build time, render the HTML, and save the resulting content back to a dist folder. You can then serve your dist folder instead of serving your original non pre-rendered bundle.
 
-In case of a human user access, we can serve the web site the "normal" way, without asking the SSR to pre-render the page. For that it's possible to use 3 types of proxies: SSR Proxy, HTTP Proxy or Static File Serving, in any order that you see fit. Firstly, the order of priority should be configured with the "proxyOrder" option, so for example, if configured as ['SsrProxy', 'HttpProxy', 'StaticProxy'], "ssr.shouldUse" will ask if SSR should be used, if it returns false, then "httpProxy.shouldUse" will ask if HTTP Proxy should be used, and finally, "static.shouldUse" will ask if Static File Serving should be used. If the return of all proxy options is false, or if one of then returns a exception (e.g. page not found), the web server will return a empty HTTP response with status equals to the return of the "failStatus" callback.
+### npx Example
 
-## Static Site Generator mode
+**Commands**
+```bash
+# With Args
+npx ssr-proxy-js --mode=build --src=./public --dist=./dist --job.routes='[{"url":"/"},{"url":"/nested"}]'
 
-If all your content is static, meaning it won't change dependending on who or how your pages are accessed, you can pre-build all your routes using the `--mode=build` option, which will access all your pre-defined routes in build time, render the HTML, and save the resulting content back to a dist folder. You can then serve your dist folder instead of serving your original non pre-rendered bundle.
+# With Config File
+npx ssr-proxy-js --mode=build -c ./ssr-build-js.config.json
+```
+
+**Config File**
+```javascript
+// ./ssr-build-js.config.json
+{
+    "src": "./public",
+    "dist": "./src",
+    "job": {
+        "routes": [
+            { "method": "GET", "url": "/" },
+            { "method": "GET", "url": "/nested" }
+        ]
+    }
+}
+```
+
+### Simple Example
+
+```javascript
+const { SsrBuild } = require('ssr-proxy-js');
+
+const ssrBuild = new SsrBuild({
+    "src": "./public",
+    "dist": "./src",
+    "job": {
+        "routes": [
+            { "method": "GET", "url": "/" },
+            { "method": "GET", "url": "/nested" }
+        ]
+    }
+});
+
+ssrBuild.start();
+```
+
+### Full Example
+
+```typescript
+import * as os from 'os';
+import * as path from 'path';
+import { LogLevel, SsrBuild, SsrBuildConfig } from 'ssr-proxy-js';
+
+const config: SsrBuildConfig = {
+    httpPort: 8080,
+    hostname: 'localhost',
+    src: 'public',
+    dist: 'dist',
+    stopOnError: false,
+    serverMiddleware: async (req, res, next) => {
+        res.sendFile(path.join(__dirname, 'public/index.html'));
+    },
+    reqMiddleware: async (params) => {
+        params.headers['Referer'] = 'http://google.com';
+        return params;
+    },
+    resMiddleware: async (params, result) => {
+        if (result.text == null) return result;
+        result.text = result.text.replace('</html>', '\n\t<div>MIDDLEWARE</div>\n</html>');
+        result.text = result.text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        return result;
+    },
+    ssr: {
+        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
+        sharedBrowser: true,
+        queryParams: [{ key: 'headless', value: 'true' }],
+        allowedResources: ['document', 'script', 'xhr', 'fetch'],
+        waitUntil: 'networkidle0',
+        timeout: 60000,
+    },
+    log: {
+        level: LogLevel.Info,
+        console: {
+            enabled: true,
+        },
+        file: {
+            enabled: true,
+            dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
+        },
+    },
+    job: {
+        retries: 3,
+        parallelism: 5,
+        routes: [{ method: 'GET', url: '/' },{ method: 'GET', url: '/nested' },{ method: 'GET', url: '/page.html' },{ method: 'GET', url: '/iframe.html' }],
+    },
+};
+
+const ssrBuild = new SsrBuild(config);
+
+ssrBuild.start();
+```
 
 ## SSR Proxy
 
@@ -158,110 +253,13 @@ const ssrProxy = new SsrProxy({
 ssrProxy.start();
 ```
 
-## SSR Build
+### Caching
 
-Build pre-rendered pages to serve to your users, without any added server complexity or extra response delay.
+Caching allows us to increase the performance of the web serving by preventing excessive new renders for web pages that have been accessed recently. Caching is highly configurable to allow total control of the workflow, for example, it's possible to decide if cache should or shouldn't be used each time the website is accessed, with the "shouldUse" option. Also, it's possible to configure a automatic cache refresh, using the "cache.autoRefresh" configuration.
 
-### npx Example
+### Fallbacks
 
-**Commands**
-```bash
-# With Args
-npx ssr-proxy-js --mode=build --src=./public --dist=./dist --job.routes='[{"url":"/"},{"url":"/nested"}]'
-
-# With Config File
-npx ssr-proxy-js --mode=build -c ./ssr-build-js.config.json
-```
-
-**Config File**
-```javascript
-// ./ssr-build-js.config.json
-{
-    "src": "./public",
-    "dist": "./src",
-    "job": {
-        "routes": [
-            { "method": "GET", "url": "/" },
-            { "method": "GET", "url": "/nested" }
-        ]
-    }
-}
-```
-
-### Simple Example
-
-```javascript
-const { SsrBuild } = require('ssr-proxy-js');
-
-const ssrBuild = new SsrBuild({
-    "src": "./public",
-    "dist": "./src",
-    "job": {
-        "routes": [
-            { "method": "GET", "url": "/" },
-            { "method": "GET", "url": "/nested" }
-        ]
-    }
-});
-
-ssrBuild.start();
-```
-
-### Full Example
-
-```typescript
-import * as os from 'os';
-import * as path from 'path';
-import { LogLevel, SsrBuild, SsrBuildConfig } from 'ssr-proxy-js';
-
-const config: SsrBuildConfig = {
-    httpPort: 8080,
-    hostname: 'localhost',
-    src: 'public',
-    dist: 'dist',
-    stopOnError: false,
-    serverMiddleware: async (req, res, next) => {
-        res.sendFile(path.join(__dirname, 'public/index.html'));
-    },
-    reqMiddleware: async (params) => {
-        params.headers['Referer'] = 'http://google.com';
-        return params;
-    },
-    resMiddleware: async (params, result) => {
-        if (result.text == null) return result;
-        result.text = result.text.replace('</html>', '\n\t<div>MIDDLEWARE</div>\n</html>');
-        result.text = result.text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-        return result;
-    },
-    ssr: {
-        browserConfig: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
-        sharedBrowser: true,
-        queryParams: [{ key: 'headless', value: 'true' }],
-        allowedResources: ['document', 'script', 'xhr', 'fetch'],
-        waitUntil: 'networkidle0',
-        timeout: 60000,
-    },
-    log: {
-        level: LogLevel.Info,
-        console: {
-            enabled: true,
-        },
-        file: {
-            enabled: true,
-            dirPath: path.join(os.tmpdir(), 'ssr-proxy-js/logs'),
-        },
-    },
-    job: {
-        retries: 3,
-        parallelism: 5,
-        routes: [{ method: 'GET', url: '/' },{ method: 'GET', url: '/nested' },{ method: 'GET', url: '/page.html' },{ method: 'GET', url: '/iframe.html' }],
-    },
-};
-
-const ssrBuild = new SsrBuild(config);
-
-ssrBuild.start();
-```
+In case of a human user access, we can serve the web site the "normal" way, without asking the SSR to pre-render the page. For that it's possible to use 3 types of proxies: SSR Proxy, HTTP Proxy or Static File Serving, in any order that you see fit. Firstly, the order of priority should be configured with the "proxyOrder" option, so for example, if configured as ['SsrProxy', 'HttpProxy', 'StaticProxy'], "ssr.shouldUse" will ask if SSR should be used, if it returns false, then "httpProxy.shouldUse" will ask if HTTP Proxy should be used, and finally, "static.shouldUse" will ask if Static File Serving should be used. If the return of all proxy options is false, or if one of then returns a exception (e.g. page not found), the web server will return a empty HTTP response with status equals to the return of the "failStatus" callback.
 
 ## More options
 
