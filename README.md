@@ -3,6 +3,10 @@
 
 # SSRProxy.js
 
+Modes:\
+[SSR Build - Static Site Generator](#ssr-build-static-site-generator-mode)\
+[SSR Proxy - Server Rendering](#ssr-proxy-server-rendering-mode)
+
 A Node.js tool for Server-Side Rendering (SSR) and Static Site Generation (SSG) using headless Chrome via Puppeteer.
 
 Server-Side Rendering, or SSR for short, is a technique used to serve Single-Page Applications (SPAs, e.g. React.js, Vue.js and Angular based websites) with Web Crawlers in mind, such as Googlebot. Crawlers are used everywhere in the internet to a variety of objectives, with the most known being for indexing the web for search engines, which is done by companies such as Google (Googlebot), Bing (Bingbot) and DuckDuckGo (DuckDuckBot).
@@ -29,6 +33,8 @@ The implemantation of this package is hugelly inspired by an article from Google
 https://developers.google.com/web/tools/puppeteer/articles/ssr
 
 The main problem regarding the workflow described above is that the process of rendering the web page through a browser takes some time, so if done incorrectly, it might have a big impact on the users experience. That's why this package also comes with two essencial feature: **Caching**, **Fallbacks** and **Static Site Generation**.
+
+---
 
 ## SSR Build (Static Site Generator mode)
 
@@ -137,7 +143,9 @@ const ssrBuild = new SsrBuild(config);
 ssrBuild.start();
 ```
 
-## SSR Proxy
+---
+
+## SSR Proxy (Server Rendering mode)
 
 Proxy your requests via the SSR server to serve pre-rendered pages to your users.
 
