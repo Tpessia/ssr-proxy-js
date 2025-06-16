@@ -24,7 +24,7 @@ const config: SsrBuildConfig = {
         return result;
     },
     ssr: {
-        browserConfig: { headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
+        browserConfig: { headless: false, slowMo: 1000, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], timeout: 60000 },
         sharedBrowser: true,
         queryParams: [{ key: 'headless', value: 'true' }],
         allowedResources: ['document', 'script', 'xhr', 'fetch'],
