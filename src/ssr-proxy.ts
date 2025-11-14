@@ -49,6 +49,7 @@ export class SsrProxy extends SsrRender {
                 sleep: undefined,
                 cleanUpCron: undefined,
                 cleanUpTz: 'Etc/UTC',
+                pageMiddleware: undefined,
             },
             httpProxy: {
                 shouldUse: true,

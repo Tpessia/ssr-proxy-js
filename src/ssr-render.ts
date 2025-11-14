@@ -77,6 +77,9 @@ export abstract class SsrRender {
             logger.debug('SSR: New Page');
             page = await browser.newPage();
 
+            // Page middleware
+            this.configSsr.pageMiddleware && await this.configSsr.pageMiddleware(page, url);
+
             // Intercept network requests
             let interceptCount = 0;
             await page.setRequestInterception(true);

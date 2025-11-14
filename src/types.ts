@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Product, PuppeteerLifeCycleEvent, ResourceType } from 'puppeteer';
+import { BrowserConnectOptions, BrowserLaunchArgumentOptions, LaunchOptions, Page, Product, PuppeteerLifeCycleEvent, ResourceType } from 'puppeteer';
 import { Stream } from 'stream';
 
 // SSR
@@ -60,6 +60,12 @@ export interface SsrConfig {
      * @default undefined
      */
     sleep?: number;
+    /**
+     * Function for configuring the page before rendering
+     * @example async (page, url) => { await page.setViewport({ width: 1366, height: 768 }); }
+     * @default undefined
+     */
+    pageMiddleware?: (page: Page, url: URL) => Promise<void>;
 }
 
 /**
